@@ -23,10 +23,10 @@ jobs:
           python-version: 3.x
       - name: Install dependencies
         run: |
-          pip install git+https://${GH_TOKEN}@github.com/squidfunk/mkdocs-material-insiders.git
+          pip install git+https://${GH_TOKEN}@github.com/squidfunk/mkdocs-material.git
           pip install -r docs/build/requirements.txt
         env:
-          GH_TOKEN: ${{ secrets.MKDOCS_AQUA_BOT }}
+          GH_TOKEN: ${{ secrets.MKDOCS_KHULNASOFT_BOT }}
       - name: Configure the git user
         run: |
           git config user.name "khulnasoft-lab"
