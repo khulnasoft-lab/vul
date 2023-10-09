@@ -38,6 +38,20 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/hashicorp/golang-lru/v2 v2.0.6
 	github.com/in-toto/in-toto-golang v0.9.0
+	github.com/khulnasoft-lab/boltdb-fixtures v1.0.0
+	github.com/khulnasoft-lab/go-dep-parser v1.0.2
+	github.com/khulnasoft-lab/go-gem-version v1.0.0
+	github.com/khulnasoft-lab/go-npm-version v1.0.0
+	github.com/khulnasoft-lab/go-pep440-version v1.0.0
+	github.com/khulnasoft-lab/goversion v1.0.1
+	github.com/khulnasoft-lab/loading v0.0.2
+	github.com/khulnasoft-lab/table v1.8.0
+	github.com/khulnasoft-lab/testdocker v1.0.0
+	github.com/khulnasoft-lab/tml v0.0.2
+	github.com/khulnasoft-lab/vul-db v0.0.0-20231001154124-3ee1fef0dc41
+	github.com/khulnasoft-lab/vul-java-db v1.0.1
+	github.com/khulnasoft-lab/vul-kubernetes v0.5.5
+	github.com/khulnasoft/defsec v1.0.3
 	github.com/knqyf263/go-apk-version v0.0.0-20200609155635-041fdbb8563f
 	github.com/knqyf263/go-deb-version v0.0.0-20230223133812-3ed183d23422
 	github.com/knqyf263/go-rpm-version v0.0.0-20220614171824-631e686d1075
@@ -91,8 +105,8 @@ require (
 	google.golang.org/protobuf v1.31.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.28.1
-	k8s.io/utils v0.0.0-20230406110748-d93618cff8a2
-	modernc.org/sqlite v1.23.1
+	k8s.io/utils v0.0.0-20230726121419-3b25d923346b
+	modernc.org/sqlite v1.25.0
 )
 
 require (
@@ -230,7 +244,7 @@ require (
 	github.com/go-openapi/swag v0.22.4 // indirect
 	github.com/go-openapi/validate v0.22.1 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
-	github.com/goccy/go-yaml v1.8.1 // indirect
+	github.com/goccy/go-yaml v1.11.0 // indirect
 	github.com/gofrs/uuid v4.3.1+incompatible // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang-jwt/jwt/v4 v4.5.0 // indirect
@@ -264,8 +278,6 @@ require (
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
 	github.com/kevinburke/ssh_config v1.2.0 // indirect
-	github.com/khulnasoft-lab/tml v0.0.2 // indirect
-	github.com/khulnasoft/defsec v1.0.3 // indirect
 	github.com/klauspost/compress v1.16.6 // indirect
 	github.com/lann/builder v0.0.0-20180802200727-47ae307949d0 // indirect
 	github.com/lann/ps v0.0.0-20150810152359-62de8c46ede0 // indirect
@@ -278,7 +290,7 @@ require (
 	github.com/magiconair/properties v1.8.7 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.19 // indirect
-	github.com/mattn/go-runewidth v0.0.14 // indirect
+	github.com/mattn/go-runewidth v0.0.15 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
 	github.com/microsoft/go-rustaudit v0.0.0-20220808201409-204dfee52032 // indirect
 	github.com/miekg/dns v1.1.50 // indirect
@@ -375,9 +387,9 @@ require (
 	lukechampine.com/uint128 v1.2.0 // indirect
 	modernc.org/cc/v3 v3.40.0 // indirect
 	modernc.org/ccgo/v3 v3.16.13 // indirect
-	modernc.org/libc v1.22.5 // indirect
+	modernc.org/libc v1.24.1 // indirect
 	modernc.org/mathutil v1.5.0 // indirect
-	modernc.org/memory v1.5.0 // indirect
+	modernc.org/memory v1.6.0 // indirect
 	modernc.org/opt v0.1.3 // indirect
 	modernc.org/strutil v1.1.3 // indirect
 	modernc.org/token v1.0.1 // indirect
