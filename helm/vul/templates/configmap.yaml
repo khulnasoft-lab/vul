@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "vul.fullname" . }}
+  labels:
+{{ include "vul.labels" . | indent 4 }}
+data:
+  VUL_LISTEN: "0.0.0.0:{{ .Values.service.port }}"
+  VUL_CACHE_DIR: "/home/scanner/.cache/vul"
+{{- if .Values.vul.cache.redis.enabled }}
+  VUL_CACHE_BACKEND: {{ .Values.vul.cache.redis.url | quote }}
+  VUL_CACHE_TTL: {{ .Values.vul.cache.redis.ttl | quote }}
+  VUL_REDIS_TLS: {{ .Values.vul.cache.redis.tls | quote }}
+{{- end }}
+  VUL_DEBUG: {{ .Values.vul.debugMode | quote }}
+  VUL_SKIP_DB_UPDATE: {{ .Values.vul.skipDBUpdate | quote }}
+  VUL_DB_REPOSITORY: {{ .Values.vul.dbRepository | quote }}
+{{- if .Values.httpProxy }}
+  HTTP_PROXY: {{ .Values.httpProxy | quote }}
+{{- end }}
+{{- if .Values.httpsProxy }}
+  HTTPS_PROXY: {{ .Values.httpsProxy | quote }}
+{{- end }}
+{{- if .Values.noProxy }}
+  NO_PROXY: {{ .Values.noProxy | quote }}
+{{- end }}
+{{- with .Values.vul.extraEnvVars }}
+  {{- . | toYaml | nindent 2 }}
+{{- end }}

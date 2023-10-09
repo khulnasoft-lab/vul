@@ -1,0 +1,11 @@
+FROM alpine:3.18.4
+RUN apk --no-cache add ca-certificates git
+
+# binaries were created with GoReleaser
+# need to copy binaries from folder with correct architecture
+# example architecture folder: dist/vul_canary_build_linux_arm64/vul
+# GoReleaser adds _v* to the folder name, but only when GOARCH is amd64 
+ARG TARGETARCH
+COPY "dist/vul_canary_build_linux_${TARGETARCH}*/vul" /usr/local/bin/vul
+COPY contrib/*.tpl contrib/
+ENTRYPOINT ["vul"]

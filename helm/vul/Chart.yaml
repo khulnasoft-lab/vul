@@ -1,0 +1,11 @@
+apiVersion: v2
+name: vul
+version: 0.7.0
+appVersion: 0.37.2
+description: Vul helm chart
+keywords:
+  - scanner
+  - vul
+  - vulnerability
+sources:
+  - https://github.com/khulnasoft-lab/vul

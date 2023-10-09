@@ -1,0 +1,47 @@
+package gradle
+
+import (
+	"context"
+	"os"
+	"strings"
+
+	"golang.org/x/xerrors"
+
+	"github.com/khulnasoft-lab/go-dep-parser/pkg/gradle/lockfile"
+	"github.com/khulnasoft-lab/vul/pkg/fanal/analyzer"
+	"github.com/khulnasoft-lab/vul/pkg/fanal/analyzer/language"
+	"github.com/khulnasoft-lab/vul/pkg/fanal/types"
+)
+
+func init() {
+	analyzer.RegisterAnalyzer(&gradleLockAnalyzer{})
+}
+
+const (
+	version        = 1
+	fileNameSuffix = "gradle.lockfile"
+)
+
+// gradleLockAnalyzer analyzes '*gradle.lockfile'
+type gradleLockAnalyzer struct{}
+
+func (a gradleLockAnalyzer) Analyze(_ context.Context, input analyzer.AnalysisInput) (*analyzer.AnalysisResult, error) {
+	p := lockfile.NewParser()
+	res, err := language.Analyze(types.Gradle, input.FilePath, input.Content, p)
+	if err != nil {
+		return nil, xerrors.Errorf("%s parse error: %w", input.FilePath, err)
+	}
+	return res, nil
+}
+
+func (a gradleLockAnalyzer) Required(filePath string, _ os.FileInfo) bool {
+	return strings.HasSuffix(filePath, fileNameSuffix)
+}
+
+func (a gradleLockAnalyzer) Type() analyzer.Type {
+	return analyzer.TypeGradleLock
+}
+
+func (a gradleLockAnalyzer) Version() int {
+	return version
+}

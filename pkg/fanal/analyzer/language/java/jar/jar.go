@@ -1,0 +1,103 @@
+package jar
+
+import (
+	"context"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"golang.org/x/xerrors"
+
+	dio "github.com/khulnasoft-lab/go-dep-parser/pkg/io"
+	"github.com/khulnasoft-lab/go-dep-parser/pkg/java/jar"
+	"github.com/khulnasoft-lab/vul/pkg/fanal/analyzer"
+	"github.com/khulnasoft-lab/vul/pkg/fanal/analyzer/language"
+	"github.com/khulnasoft-lab/vul/pkg/fanal/types"
+	"github.com/khulnasoft-lab/vul/pkg/javadb"
+	"github.com/khulnasoft-lab/vul/pkg/log"
+	"github.com/khulnasoft-lab/vul/pkg/parallel"
+)
+
+func init() {
+	analyzer.RegisterPostAnalyzer(analyzer.TypeJar, newJavaLibraryAnalyzer)
+}
+
+const version = 1
+
+var requiredExtensions = []string{
+	".jar",
+	".war",
+	".ear",
+	".par",
+}
+
+// javaLibraryAnalyzer analyzes jar/war/ear/par files
+type javaLibraryAnalyzer struct {
+	client *javadb.DB
+	slow   bool
+}
+
+func newJavaLibraryAnalyzer(options analyzer.AnalyzerOptions) (analyzer.PostAnalyzer, error) {
+	return &javaLibraryAnalyzer{
+		slow: options.Slow,
+	}, nil
+}
+
+func (a *javaLibraryAnalyzer) PostAnalyze(ctx context.Context, input analyzer.PostAnalysisInput) (*analyzer.AnalysisResult, error) {
+	// TODO: think about the sonatype API and "--offline"
+	var err error
+	log.Logger.Info("JAR files found")
+	a.client, err = javadb.NewClient()
+	if err != nil {
+		return nil, xerrors.Errorf("Unable to initialize the Java DB: %s", err)
+	}
+	defer func() { _ = a.client.Close() }()
+	log.Logger.Info("Analyzing JAR files takes a while...")
+
+	// Skip analyzing JAR files as the nil client means the Java DB was not downloaded successfully.
+	if a.client == nil {
+		return nil, nil
+	}
+
+	// It will be called on each JAR file
+	onFile := func(path string, info fs.FileInfo, r dio.ReadSeekerAt) (*types.Application, error) {
+		p := jar.NewParser(a.client, jar.WithSize(info.Size()), jar.WithFilePath(path))
+		return language.ParsePackage(types.Jar, path, r, p, input.Options.FileChecksum)
+	}
+
+	var apps []types.Application
+	onResult := func(app *types.Application) error {
+		if app == nil {
+			return nil
+		}
+		apps = append(apps, *app)
+		return nil
+	}
+
+	if err = parallel.WalkDir(ctx, input.FS, ".", a.slow, onFile, onResult); err != nil {
+		return nil, xerrors.Errorf("walk dir error: %w", err)
+	}
+
+	return &analyzer.AnalysisResult{
+		Applications: apps,
+	}, nil
+}
+
+func (a *javaLibraryAnalyzer) Required(filePath string, _ os.FileInfo) bool {
+	ext := filepath.Ext(filePath)
+	for _, required := range requiredExtensions {
+		if strings.EqualFold(ext, required) {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *javaLibraryAnalyzer) Type() analyzer.Type {
+	return analyzer.TypeJar
+}
+
+func (a *javaLibraryAnalyzer) Version() int {
+	return version
+}
