@@ -257,7 +257,7 @@ func TestClientServer(t *testing.T) {
 			args: csArgs{
 				Command:          "repo",
 				RemoteAddrOption: "--server",
-				Target:           "https://github.com/knqyf263/vul-ci-test",
+				Target:           "https://github.com/khulnasoft-lab/vul-ci-test",
 			},
 			golden: "testdata/test-repo.json.golden",
 		},

@@ -73,7 +73,7 @@ func (Tool) Labeler() error {
 	if exists(filepath.Join(GOBIN, "labeler")) {
 		return nil
 	}
-	return sh.Run("go", "install", "github.com/knqyf263/labeler@latest")
+	return sh.Run("go", "install", "github.com/khulnasoft-lab/labeler@latest")
 }
 
 // EasyJSON installs easyjson
@@ -102,7 +102,7 @@ func (Tool) Mockery() error {
 	if exists(filepath.Join(GOBIN, "mockery")) {
 		return nil
 	}
-	return sh.Run("go", "install", "github.com/knqyf263/mockery/cmd/mockery@latest")
+	return sh.Run("go", "install", "github.com/khulnasoft-lab/mockery/cmd/mockery@latest")
 }
 
 // Wire generates the wire_gen.go file for each package

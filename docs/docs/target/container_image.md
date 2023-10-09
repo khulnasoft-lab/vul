@@ -422,13 +422,13 @@ The following two sources are supported:
 Example:
 
 ```bash
-$ vul image --sbom-sources oci ghcr.io/knqyf263/oci-referrers
+$ vul image --sbom-sources oci ghcr.io/khulnasoft-lab/oci-referrers
 2023-03-05T17:36:55.278+0200    INFO    Vulnerability scanning is enabled
 2023-03-05T17:36:58.103+0200    INFO    Detected SBOM format: cyclonedx-json
 2023-03-05T17:36:58.129+0200    INFO    Found SBOM (cyclonedx) in the OCI referrers
 ...
 
-ghcr.io/knqyf263/oci-referrers (alpine 3.16.2)
+ghcr.io/khulnasoft-lab/oci-referrers (alpine 3.16.2)
 ==============================================
 Total: 17 (UNKNOWN: 0, LOW: 0, MEDIUM: 5, HIGH: 9, CRITICAL: 3)
 ```

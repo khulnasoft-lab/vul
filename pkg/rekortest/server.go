@@ -39,7 +39,7 @@ var (
 			PredicateType: "https://cyclonedx.org/bom",
 			Subject: []in_toto.Subject{
 				{
-					Name: "index.docker.io/knqyf263/cosign-test",
+					Name: "index.docker.io/khulnasoft-lab/cosign-test",
 					Digest: slsa.DigestSet{
 						"sha256": "a777c9c66ba177ccfea23f2a216ff6721e78a662cd17019488c417135299cd89",
 					},

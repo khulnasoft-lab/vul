@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	version "github.com/knqyf263/go-apk-version"
+	version "github.com/khulnasoft-lab/go-apk-version"
 	"golang.org/x/xerrors"
 	"k8s.io/utils/clock"
 

@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	cn "github.com/google/go-containerregistry/pkg/name"
-	version "github.com/knqyf263/go-rpm-version"
+	version "github.com/khulnasoft-lab/go-rpm-version"
 	packageurl "github.com/package-url/packageurl-go"
 	"golang.org/x/xerrors"
 

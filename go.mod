@@ -39,12 +39,17 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.6
 	github.com/in-toto/in-toto-golang v0.9.0
 	github.com/khulnasoft-lab/boltdb-fixtures v1.0.0
+	github.com/khulnasoft-lab/go-apk-version v0.0.0-20231008114037-7c3886bc8eda
+	github.com/khulnasoft-lab/go-deb-version v0.0.0-20231008112102-b9979c743dca
 	github.com/khulnasoft-lab/go-dep-parser v1.0.2
 	github.com/khulnasoft-lab/go-gem-version v1.0.0
 	github.com/khulnasoft-lab/go-npm-version v1.0.0
 	github.com/khulnasoft-lab/go-pep440-version v1.0.0
+	github.com/khulnasoft-lab/go-rpm-version v0.0.0-20231008111517-b1e9c56c569d
+	github.com/khulnasoft-lab/go-rpmdb v0.0.1
 	github.com/khulnasoft-lab/goversion v1.0.1
 	github.com/khulnasoft-lab/loading v0.0.2
+	github.com/khulnasoft-lab/nested v0.0.0-20231008132242-eb281525cb7d
 	github.com/khulnasoft-lab/table v1.8.0
 	github.com/khulnasoft-lab/testdocker v1.0.0
 	github.com/khulnasoft-lab/tml v0.0.2
@@ -52,11 +57,6 @@ require (
 	github.com/khulnasoft-lab/vul-java-db v1.0.1
 	github.com/khulnasoft-lab/vul-kubernetes v0.5.5
 	github.com/khulnasoft/defsec v1.0.3
-	github.com/knqyf263/go-apk-version v0.0.0-20200609155635-041fdbb8563f
-	github.com/knqyf263/go-deb-version v0.0.0-20230223133812-3ed183d23422
-	github.com/knqyf263/go-rpm-version v0.0.0-20220614171824-631e686d1075
-	github.com/knqyf263/go-rpmdb v0.0.0-20230517124904-b97c85e63254
-	github.com/knqyf263/nested v0.0.1
 	github.com/kylelemons/godebug v1.1.0
 	github.com/magefile/mage v1.15.0
 	github.com/mailru/easyjson v0.7.7
@@ -279,6 +279,8 @@ require (
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
 	github.com/kevinburke/ssh_config v1.2.0 // indirect
 	github.com/klauspost/compress v1.16.6 // indirect
+	github.com/knqyf263/go-deb-version v0.0.0-20190517075300-09fca494f03d // indirect
+	github.com/knqyf263/go-rpm-version v0.0.0-20170716094938-74609b86c936 // indirect
 	github.com/lann/builder v0.0.0-20180802200727-47ae307949d0 // indirect
 	github.com/lann/ps v0.0.0-20150810152359-62de8c46ede0 // indirect
 	github.com/liamg/iamgo v0.0.9 // indirect

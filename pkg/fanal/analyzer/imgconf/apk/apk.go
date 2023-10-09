@@ -25,7 +25,7 @@ const (
 )
 
 var defaultApkIndexArchiveURL = "https://raw.githubusercontent." +
-	"com/knqyf263/apkIndex-archive/master/alpine/v%s/main/x86_64/history.json"
+	"com/khulnasoft-lab/apkIndex-archive/master/alpine/v%s/main/x86_64/history.json"
 
 func init() {
 	analyzer.RegisterConfigAnalyzer(analyzer.TypeApkCommand, newAlpineCmdAnalyzer)

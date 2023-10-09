@@ -14,7 +14,7 @@ import (
 	"sort"
 	"strings"
 
-	debVersion "github.com/knqyf263/go-deb-version"
+	debVersion "github.com/khulnasoft-lab/go-deb-version"
 	"github.com/samber/lo"
 	"go.uber.org/zap"
 	"golang.org/x/exp/slices"

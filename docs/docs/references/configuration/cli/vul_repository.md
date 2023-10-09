@@ -10,7 +10,7 @@ vul repository [flags] (REPO_PATH | REPO_URL)
 
 ```
   # Scan your remote git repository
-  $ vul repo https://github.com/knqyf263/vul-ci-test
+  $ vul repo https://github.com/khulnasoft-lab/vul-ci-test
   # Scan your local git repository
   $ vul repo /path/to/your/repository
 ```

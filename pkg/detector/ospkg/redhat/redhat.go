@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	version "github.com/knqyf263/go-rpm-version"
+	version "github.com/khulnasoft-lab/go-rpm-version"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 	"golang.org/x/xerrors"

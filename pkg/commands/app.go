@@ -13,7 +13,6 @@ import (
 	"github.com/spf13/viper"
 	"golang.org/x/xerrors"
 
-	awsScanner "github.com/khulnasoft/defsec/pkg/scanners/cloud/aws"
 	awscommands "github.com/khulnasoft-lab/vul/pkg/cloud/aws/commands"
 	"github.com/khulnasoft-lab/vul/pkg/commands/artifact"
 	"github.com/khulnasoft-lab/vul/pkg/commands/convert"
@@ -27,6 +26,7 @@ import (
 	"github.com/khulnasoft-lab/vul/pkg/types"
 	"github.com/khulnasoft-lab/vul/pkg/version"
 	xstrings "github.com/khulnasoft-lab/vul/pkg/x/strings"
+	awsScanner "github.com/khulnasoft/defsec/pkg/scanners/cloud/aws"
 )
 
 const (
@@ -447,7 +447,7 @@ func NewRepositoryCommand(globalFlags *flag.GlobalFlagGroup) *cobra.Command {
 		GroupID: groupScanning,
 		Short:   "Scan a repository",
 		Example: `  # Scan your remote git repository
-  $ vul repo https://github.com/knqyf263/vul-ci-test
+  $ vul repo https://github.com/khulnasoft-lab/vul-ci-test
   # Scan your local git repository
   $ vul repo /path/to/your/repository`,
 		PreRunE: func(cmd *cobra.Command, args []string) error {

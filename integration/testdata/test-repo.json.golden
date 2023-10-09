@@ -1,6 +1,6 @@
 {
   "SchemaVersion": 2,
-  "ArtifactName": "https://github.com/knqyf263/vul-ci-test",
+  "ArtifactName": "https://github.com/khulnasoft-lab/vul-ci-test",
   "ArtifactType": "repository",
   "Metadata": {
     "ImageConfig": {

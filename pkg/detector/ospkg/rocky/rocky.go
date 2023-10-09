@@ -3,7 +3,7 @@ package rocky
 import (
 	"time"
 
-	version "github.com/knqyf263/go-rpm-version"
+	version "github.com/khulnasoft-lab/go-rpm-version"
 	"golang.org/x/xerrors"
 	"k8s.io/utils/clock"
 

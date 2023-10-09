@@ -205,7 +205,7 @@ Total: 1 (CRITICAL: 1)
 ## Remote scan of git repository
 Also, there is a way to scan remote git repository:
 ```shell
-$ vul repo https://github.com/knqyf263/vul-ci-test --server http://localhost:8080 
+$ vul repo https://github.com/khulnasoft-lab/vul-ci-test --server http://localhost:8080 
 ```
 **Note**: It's important to specify the protocol (http or https).
 <details>

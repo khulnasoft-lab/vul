@@ -1,7 +1,7 @@
 package mariner
 
 import (
-	version "github.com/knqyf263/go-rpm-version"
+	version "github.com/khulnasoft-lab/go-rpm-version"
 	"golang.org/x/xerrors"
 
 	"github.com/khulnasoft-lab/vul-db/pkg/vulnsrc/mariner"

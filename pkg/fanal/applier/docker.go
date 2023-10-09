@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/knqyf263/nested"
+	"github.com/khulnasoft-lab/nested"
 	"github.com/samber/lo"
 
 	"github.com/khulnasoft-lab/vul/pkg/fanal/types"

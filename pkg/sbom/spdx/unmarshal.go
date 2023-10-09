@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	version "github.com/knqyf263/go-rpm-version"
+	version "github.com/khulnasoft-lab/go-rpm-version"
 	"github.com/package-url/packageurl-go"
 	"github.com/samber/lo"
 	"github.com/spdx/tools-golang/json"
