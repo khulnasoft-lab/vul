@@ -15,7 +15,7 @@ require (
 	golang.org/x/exp v0.0.0-20220407100705-7b9b53b0aca4
 	golang.org/x/mod v0.8.0
 	golang.org/x/net v0.0.0-20211015210444-4f30a5c0130f
-	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2
+	golang.org/x/xerrors 104605ab7028
 	gopkg.in/yaml.v3 v3.0.1
 )
 
