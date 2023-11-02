@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/BurntSushi/toml v1.2.1
-	github.com/khulnasoft-lab/go-pep440-version v0.0.0-20210121094942-22b2f8951d46
+	github.com/khulnasoft-lab/go-pep440-version e3fc4bc85bf1
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/hashicorp/go-retryablehttp v0.7.2
 	github.com/liamg/jfather v0.0.7
