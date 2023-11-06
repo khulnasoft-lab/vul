@@ -1,66 +1,39 @@
 package photon
 
 import (
-	"time"
-
 	version "github.com/khulnasoft-lab/go-rpm-version"
 	"golang.org/x/xerrors"
 	"k8s.io/utils/clock"
 
+	ftypes "github.com/aquasecurity/fanal/types"
+	dbTypes "github.com/khulnasoft-lab/vul-db/pkg/types"
 	"github.com/khulnasoft-lab/vul-db/pkg/vulnsrc/photon"
-	osver "github.com/khulnasoft-lab/vul/pkg/detector/ospkg/version"
-	ftypes "github.com/khulnasoft-lab/vul/pkg/fanal/types"
 	"github.com/khulnasoft-lab/vul/pkg/log"
 	"github.com/khulnasoft-lab/vul/pkg/scanner/utils"
 	"github.com/khulnasoft-lab/vul/pkg/types"
 )
 
-var (
-	eolDates = map[string]time.Time{
-		"1.0": time.Date(2022, 2, 28, 23, 59, 59, 0, time.UTC),
-		"2.0": time.Date(2022, 12, 31, 23, 59, 59, 0, time.UTC),
-		// The following versions don't have the EOL dates yet.
-		// See https://blogs.vmware.com/vsphere/2022/01/photon-1-x-end-of-support-announcement.html
-		"3.0": time.Date(2024, 6, 30, 23, 59, 59, 0, time.UTC),
-		"4.0": time.Date(2025, 12, 31, 23, 59, 59, 0, time.UTC),
-	}
-)
+// EOL can't be found for photon https://github.com/vmware/photon/issues/1031
+//var (
+//	eolDates = map[string]time.Time{}
+//)
 
-type options struct {
+// Scanner implements Photon scanner
+type Scanner struct {
+	vs    dbTypes.VulnSrc
 	clock clock.Clock
 }
 
-type option func(*options)
-
-func WithClock(c clock.Clock) option {
-	return func(opts *options) {
-		opts.clock = c
-	}
-}
-
-// Scanner implements the Photon scanner
-type Scanner struct {
-	vs photon.VulnSrc
-	*options
-}
-
 // NewScanner is the factory method for Scanner
-func NewScanner(opts ...option) *Scanner {
-	o := &options{
-		clock: clock.RealClock{},
-	}
-
-	for _, opt := range opts {
-		opt(o)
-	}
+func NewScanner() *Scanner {
 	return &Scanner{
-		vs:      photon.NewVulnSrc(),
-		options: o,
+		vs:    photon.NewVulnSrc(),
+		clock: clock.RealClock{},
 	}
 }
 
 // Detect scans and returns vulnerabilities using photon scanner
-func (s *Scanner) Detect(osVer string, _ *ftypes.Repository, pkgs []ftypes.Package) ([]types.DetectedVulnerability, error) {
+func (s *Scanner) Detect(osVer string, pkgs []ftypes.Package) ([]types.DetectedVulnerability, error) {
 	log.Logger.Info("Detecting Photon Linux vulnerabilities...")
 	log.Logger.Debugf("Photon Linux: os version: %s", osVer)
 	log.Logger.Debugf("Photon Linux: the number of packages: %d", len(pkgs))
@@ -78,13 +51,9 @@ func (s *Scanner) Detect(osVer string, _ *ftypes.Repository, pkgs []ftypes.Packa
 			fixedVersion := version.NewVersion(adv.FixedVersion)
 			vuln := types.DetectedVulnerability{
 				VulnerabilityID:  adv.VulnerabilityID,
-				PkgID:            pkg.ID,
 				PkgName:          pkg.Name,
 				InstalledVersion: installed,
-				PkgRef:           pkg.Ref,
 				Layer:            pkg.Layer,
-				Custom:           adv.Custom,
-				DataSource:       adv.DataSource,
 			}
 			if installedVersion.LessThan(fixedVersion) {
 				vuln.FixedVersion = adv.FixedVersion
@@ -95,7 +64,7 @@ func (s *Scanner) Detect(osVer string, _ *ftypes.Repository, pkgs []ftypes.Packa
 	return vulns, nil
 }
 
-// IsSupportedVersion checks if the version is supported.
-func (s *Scanner) IsSupportedVersion(osFamily ftypes.OSType, osVer string) bool {
-	return osver.Supported(s.clock, eolDates, osFamily, osVer)
+// IsSupportedVersion checks is OSFamily can be scanned
+func (s *Scanner) IsSupportedVersion(osFamily, osVer string) bool {
+	return true
 }

@@ -7,9 +7,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	ftypes "github.com/aquasecurity/fanal/types"
+	ptypes "github.com/aquasecurity/go-dep-parser/pkg/types"
 	dbTypes "github.com/khulnasoft-lab/vul-db/pkg/types"
 	"github.com/khulnasoft-lab/vul-db/pkg/vulnsrc/vulnerability"
-	ftypes "github.com/khulnasoft-lab/vul/pkg/fanal/types"
+	"github.com/khulnasoft-lab/vul/pkg/report"
 	"github.com/khulnasoft-lab/vul/pkg/types"
 	"github.com/khulnasoft-lab/vul/rpc/common"
 	"github.com/khulnasoft-lab/vul/rpc/scanner"
@@ -38,13 +40,6 @@ func TestConvertToRpcPkgs(t *testing.T) {
 						SrcVersion: "1.2.3",
 						SrcRelease: "1",
 						SrcEpoch:   2,
-						Licenses:   []string{"MIT"},
-						Layer: ftypes.Layer{
-							Digest: "sha256:6a428f9f83b0a29f1fdd2ccccca19a9bab805a925b8eddf432a5a3d3da04afbc",
-							DiffID: "sha256:39982b2a789afc156fff00c707d0ff1c6ab4af8f1666a8df4787714059ce24e7",
-						},
-						Digest:   "SHA1:901a7b55410321c4d35543506cff2a8613ef5aa2",
-						Indirect: true,
 					},
 				},
 			},
@@ -59,13 +54,6 @@ func TestConvertToRpcPkgs(t *testing.T) {
 					SrcVersion: "1.2.3",
 					SrcRelease: "1",
 					SrcEpoch:   2,
-					Licenses:   []string{"MIT"},
-					Layer: &common.Layer{
-						Digest: "sha256:6a428f9f83b0a29f1fdd2ccccca19a9bab805a925b8eddf432a5a3d3da04afbc",
-						DiffId: "sha256:39982b2a789afc156fff00c707d0ff1c6ab4af8f1666a8df4787714059ce24e7",
-					},
-					Digest:   "SHA1:901a7b55410321c4d35543506cff2a8613ef5aa2",
-					Indirect: true,
 				},
 			},
 		},
@@ -100,13 +88,6 @@ func TestConvertFromRpcPkgs(t *testing.T) {
 						SrcVersion: "1.2.3",
 						SrcRelease: "1",
 						SrcEpoch:   2,
-						Licenses:   []string{"MIT"},
-						Layer: &common.Layer{
-							Digest: "sha256:6a428f9f83b0a29f1fdd2ccccca19a9bab805a925b8eddf432a5a3d3da04afbc",
-							DiffId: "sha256:39982b2a789afc156fff00c707d0ff1c6ab4af8f1666a8df4787714059ce24e7",
-						},
-						Digest:   "SHA1:901a7b55410321c4d35543506cff2a8613ef5aa2",
-						Indirect: true,
 					},
 				},
 			},
@@ -121,13 +102,6 @@ func TestConvertFromRpcPkgs(t *testing.T) {
 					SrcVersion: "1.2.3",
 					SrcRelease: "1",
 					SrcEpoch:   2,
-					Licenses:   []string{"MIT"},
-					Layer: ftypes.Layer{
-						Digest: "sha256:6a428f9f83b0a29f1fdd2ccccca19a9bab805a925b8eddf432a5a3d3da04afbc",
-						DiffID: "sha256:39982b2a789afc156fff00c707d0ff1c6ab4af8f1666a8df4787714059ce24e7",
-					},
-					Digest:   "SHA1:901a7b55410321c4d35543506cff2a8613ef5aa2",
-					Indirect: true,
 				},
 			},
 		},
@@ -136,6 +110,68 @@ func TestConvertFromRpcPkgs(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := ConvertFromRPCPkgs(tt.args.rpcPkgs)
 			assert.Equal(t, tt.want, got, tt.name)
+		})
+	}
+}
+
+func TestConvertFromRpcLibraries(t *testing.T) {
+	type args struct {
+		rpcLibs []*common.Library
+	}
+	tests := []struct {
+		name string
+		args args
+		want []ftypes.LibraryInfo
+	}{
+		{
+			name: "happy path",
+			args: args{
+				rpcLibs: []*common.Library{
+					{Name: "foo", Version: "1.2.3"},
+					{Name: "bar", Version: "4.5.6"},
+				},
+			},
+			want: []ftypes.LibraryInfo{
+				{Library: ptypes.Library{Name: "foo", Version: "1.2.3"}},
+				{Library: ptypes.Library{Name: "bar", Version: "4.5.6"}},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ConvertFromRPCLibraries(tt.args.rpcLibs)
+			assert.Equal(t, got, tt.want, tt.name)
+		})
+	}
+}
+
+func TestConvertToRpcLibraries(t *testing.T) {
+	type args struct {
+		libs []ptypes.Library
+	}
+	tests := []struct {
+		name string
+		args args
+		want []*common.Library
+	}{
+		{
+			name: "happy path",
+			args: args{
+				libs: []ptypes.Library{
+					{Name: "foo", Version: "1.2.3"},
+					{Name: "bar", Version: "4.5.6"},
+				},
+			},
+			want: []*common.Library{
+				{Name: "foo", Version: "1.2.3"},
+				{Name: "bar", Version: "4.5.6"},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ConvertToRPCLibraries(tt.args.libs)
+			assert.Equal(t, got, tt.want, tt.name)
 		})
 	}
 }
@@ -165,11 +201,8 @@ func TestConvertToRpcVulns(t *testing.T) {
 							Title:       "DoS",
 							Description: "Denial of Service",
 							Severity:    "MEDIUM",
-							VendorSeverity: dbTypes.VendorSeverity{
-								vulnerability.RedHat: dbTypes.SeverityMedium,
-							},
 							CVSS: dbTypes.VendorCVSS{
-								vulnerability.RedHat: {
+								"redhat": {
 									V2Vector: "AV:L/AC:L/Au:N/C:C/I:C/A:C",
 									V3Vector: "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H",
 									V2Score:  7.2,
@@ -185,10 +218,6 @@ func TestConvertToRpcVulns(t *testing.T) {
 							DiffID: "sha256:b2a1a2d80bf0c747a4f6b0ca6af5eef23f043fcdb1ed4f3a3e750aef2dc68079",
 						},
 						PrimaryURL: "https://avd.khulnasoft.com/nvd/CVE-2019-0001",
-						DataSource: &dbTypes.DataSource{
-							Name: "GitHub Security Advisory Maven",
-							URL:  "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Amaven",
-						},
 					},
 				},
 			},
@@ -201,9 +230,6 @@ func TestConvertToRpcVulns(t *testing.T) {
 					Title:            "DoS",
 					Description:      "Denial of Service",
 					Severity:         common.Severity_MEDIUM,
-					VendorSeverity: map[string]common.Severity{
-						string(vulnerability.RedHat): common.Severity_MEDIUM,
-					},
 					Cvss: map[string]*common.CVSS{
 						"redhat": {
 							V2Vector: "AV:L/AC:L/Au:N/C:C/I:C/A:C",
@@ -220,10 +246,6 @@ func TestConvertToRpcVulns(t *testing.T) {
 					PrimaryUrl:       "https://avd.khulnasoft.com/nvd/CVE-2019-0001",
 					PublishedDate:    timestamppb.New(fixedPublishedDate),
 					LastModifiedDate: timestamppb.New(fixedLastModifiedDate),
-					DataSource: &common.DataSource{
-						Name: "GitHub Security Advisory Maven",
-						Url:  "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Amaven",
-					},
 				},
 			},
 		},
@@ -246,10 +268,6 @@ func TestConvertToRpcVulns(t *testing.T) {
 							Digest: "sha256:154ad0735c360b212b167f424d33a62305770a1fcfb6363882f5c436cfbd9812",
 							DiffID: "sha256:b2a1a2d80bf0c747a4f6b0ca6af5eef23f043fcdb1ed4f3a3e750aef2dc68079",
 						},
-						DataSource: &dbTypes.DataSource{
-							Name: "GitHub Security Advisory Maven",
-							URL:  "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Amaven",
-						},
 					},
 				},
 			},
@@ -262,16 +280,11 @@ func TestConvertToRpcVulns(t *testing.T) {
 					Title:            "DoS",
 					Description:      "Denial of Service",
 					Severity:         common.Severity_UNKNOWN,
-					VendorSeverity:   make(map[string]common.Severity),
 					Cvss:             make(map[string]*common.CVSS),
 					References:       []string{"http://example.com"},
 					Layer: &common.Layer{
 						Digest: "sha256:154ad0735c360b212b167f424d33a62305770a1fcfb6363882f5c436cfbd9812",
 						DiffId: "sha256:b2a1a2d80bf0c747a4f6b0ca6af5eef23f043fcdb1ed4f3a3e750aef2dc68079",
-					},
-					DataSource: &common.DataSource{
-						Name: "GitHub Security Advisory Maven",
-						Url:  "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Amaven",
 					},
 				},
 			},
@@ -295,61 +308,49 @@ func TestConvertFromRPCResults(t *testing.T) {
 	tests := []struct {
 		name string
 		args args
-		want []types.Result
+		want []report.Result
 	}{
 		{
 			name: "happy path",
-			args: args{
-				rpcResults: []*scanner.Result{
-					{
-						Target: "alpine:3.10",
-						Type:   string(ftypes.Alpine),
-						Vulnerabilities: []*common.Vulnerability{
-							{
-								VulnerabilityId:  "CVE-2019-0001",
-								PkgName:          "musl",
-								InstalledVersion: "1.2.3",
-								FixedVersion:     "1.2.4",
-								Title:            "DoS",
-								Description:      "Denial of Service",
-								Severity:         common.Severity_MEDIUM,
-								SeveritySource:   string(vulnerability.NVD),
-								CweIds: []string{
-									"CWE-123",
-									"CWE-456",
-								},
-								VendorSeverity: map[string]common.Severity{
-									string(vulnerability.RedHat): common.Severity_MEDIUM,
-								},
-								Cvss: map[string]*common.CVSS{
-									string(vulnerability.RedHat): {
-										V2Vector: "AV:L/AC:L/Au:N/C:C/I:C/A:C",
-										V3Vector: "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H",
-										V2Score:  7.2,
-										V3Score:  7.8,
-									},
-								},
-								References: []string{"http://example.com"},
-								Layer: &common.Layer{
-									Digest: "sha256:154ad0735c360b212b167f424d33a62305770a1fcfb6363882f5c436cfbd9812",
-									DiffId: "sha256:b2a1a2d80bf0c747a4f6b0ca6af5eef23f043fcdb1ed4f3a3e750aef2dc68079",
-								},
-								PrimaryUrl:       "https://avd.khulnasoft.com/nvd/CVE-2019-0001",
-								PublishedDate:    timestamppb.New(fixedPublishedDate),
-								LastModifiedDate: timestamppb.New(fixedLastModifiedDate),
-								DataSource: &common.DataSource{
-									Name: "GitHub Security Advisory Maven",
-									Url:  "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Amaven",
-								},
-							},
-						},
-					},
-				},
-			},
-			want: []types.Result{
+			args: args{rpcResults: []*scanner.Result{
 				{
 					Target: "alpine:3.10",
-					Type:   ftypes.Alpine,
+					Type:   vulnerability.Alpine,
+					Vulnerabilities: []*common.Vulnerability{
+						{
+							VulnerabilityId:  "CVE-2019-0001",
+							PkgName:          "musl",
+							InstalledVersion: "1.2.3",
+							FixedVersion:     "1.2.4",
+							Title:            "DoS",
+							Description:      "Denial of Service",
+							Severity:         common.Severity_MEDIUM,
+							SeveritySource:   vulnerability.Nvd,
+							CweIds:           []string{"CWE-123", "CWE-456"},
+							Cvss: map[string]*common.CVSS{
+								"redhat": {
+									V2Vector: "AV:L/AC:L/Au:N/C:C/I:C/A:C",
+									V3Vector: "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H",
+									V2Score:  7.2,
+									V3Score:  7.8,
+								},
+							},
+							References: []string{"http://example.com"},
+							Layer: &common.Layer{
+								Digest: "sha256:154ad0735c360b212b167f424d33a62305770a1fcfb6363882f5c436cfbd9812",
+								DiffId: "sha256:b2a1a2d80bf0c747a4f6b0ca6af5eef23f043fcdb1ed4f3a3e750aef2dc68079",
+							},
+							PrimaryUrl:       "https://avd.khulnasoft.com/nvd/CVE-2019-0001",
+							PublishedDate:    timestamppb.New(fixedPublishedDate),
+							LastModifiedDate: timestamppb.New(fixedLastModifiedDate),
+						},
+					},
+				}},
+			},
+			want: []report.Result{
+				{
+					Target: "alpine:3.10",
+					Type:   vulnerability.Alpine,
 					Vulnerabilities: []types.DetectedVulnerability{
 						{
 							VulnerabilityID:  "CVE-2019-0001",
@@ -360,21 +361,16 @@ func TestConvertFromRPCResults(t *testing.T) {
 								Digest: "sha256:154ad0735c360b212b167f424d33a62305770a1fcfb6363882f5c436cfbd9812",
 								DiffID: "sha256:b2a1a2d80bf0c747a4f6b0ca6af5eef23f043fcdb1ed4f3a3e750aef2dc68079",
 							},
-							SeveritySource: vulnerability.NVD,
+							SeveritySource: vulnerability.Nvd,
 							PrimaryURL:     "https://avd.khulnasoft.com/nvd/CVE-2019-0001",
 							Vulnerability: dbTypes.Vulnerability{
-								Title:       "DoS",
-								Description: "Denial of Service",
-								Severity:    common.Severity_MEDIUM.String(),
-								VendorSeverity: dbTypes.VendorSeverity{
-									vulnerability.RedHat: dbTypes.SeverityMedium,
-								},
-								CweIDs: []string{
-									"CWE-123",
-									"CWE-456",
-								},
+								Title:          "DoS",
+								Description:    "Denial of Service",
+								Severity:       common.Severity_MEDIUM.String(),
+								CweIDs:         []string{"CWE-123", "CWE-456"},
+								VendorSeverity: nil,
 								CVSS: dbTypes.VendorCVSS{
-									vulnerability.RedHat: {
+									"redhat": {
 										V2Vector: "AV:L/AC:L/Au:N/C:C/I:C/A:C",
 										V3Vector: "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H",
 										V2Score:  7.2,
@@ -385,10 +381,6 @@ func TestConvertFromRPCResults(t *testing.T) {
 								PublishedDate:    &fixedPublishedDate,
 								LastModifiedDate: &fixedLastModifiedDate,
 							},
-							DataSource: &dbTypes.DataSource{
-								Name: "GitHub Security Advisory Maven",
-								URL:  "https://github.com/advisories?query=type%3Areviewed+ecosystem%3Amaven",
-							},
 						},
 					},
 				},
@@ -396,50 +388,45 @@ func TestConvertFromRPCResults(t *testing.T) {
 		},
 		{
 			name: "happy path - with nil dates",
-			args: args{
-				rpcResults: []*scanner.Result{
-					{
-						Target: "alpine:3.10",
-						Type:   string(ftypes.Alpine),
-						Vulnerabilities: []*common.Vulnerability{
-							{
-								VulnerabilityId:  "CVE-2019-0001",
-								PkgName:          "musl",
-								InstalledVersion: "1.2.3",
-								FixedVersion:     "1.2.4",
-								Title:            "DoS",
-								Description:      "Denial of Service",
-								Severity:         common.Severity_MEDIUM,
-								SeveritySource:   string(vulnerability.NVD),
-								CweIds: []string{
-									"CWE-123",
-									"CWE-456",
-								},
-								Cvss: map[string]*common.CVSS{
-									"redhat": {
-										V2Vector: "AV:L/AC:L/Au:N/C:C/I:C/A:C",
-										V3Vector: "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H",
-										V2Score:  7.2,
-										V3Score:  7.8,
-									},
-								},
-								References: []string{"http://example.com"},
-								Layer: &common.Layer{
-									Digest: "sha256:154ad0735c360b212b167f424d33a62305770a1fcfb6363882f5c436cfbd9812",
-									DiffId: "sha256:b2a1a2d80bf0c747a4f6b0ca6af5eef23f043fcdb1ed4f3a3e750aef2dc68079",
-								},
-								PrimaryUrl:       "https://avd.khulnasoft.com/nvd/CVE-2019-0001",
-								PublishedDate:    nil,
-								LastModifiedDate: nil,
-							},
-						},
-					},
-				},
-			},
-			want: []types.Result{
+			args: args{rpcResults: []*scanner.Result{
 				{
 					Target: "alpine:3.10",
-					Type:   ftypes.Alpine,
+					Type:   vulnerability.Alpine,
+					Vulnerabilities: []*common.Vulnerability{
+						{
+							VulnerabilityId:  "CVE-2019-0001",
+							PkgName:          "musl",
+							InstalledVersion: "1.2.3",
+							FixedVersion:     "1.2.4",
+							Title:            "DoS",
+							Description:      "Denial of Service",
+							Severity:         common.Severity_MEDIUM,
+							SeveritySource:   vulnerability.Nvd,
+							CweIds:           []string{"CWE-123", "CWE-456"},
+							Cvss: map[string]*common.CVSS{
+								"redhat": {
+									V2Vector: "AV:L/AC:L/Au:N/C:C/I:C/A:C",
+									V3Vector: "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H",
+									V2Score:  7.2,
+									V3Score:  7.8,
+								},
+							},
+							References: []string{"http://example.com"},
+							Layer: &common.Layer{
+								Digest: "sha256:154ad0735c360b212b167f424d33a62305770a1fcfb6363882f5c436cfbd9812",
+								DiffId: "sha256:b2a1a2d80bf0c747a4f6b0ca6af5eef23f043fcdb1ed4f3a3e750aef2dc68079",
+							},
+							PrimaryUrl:       "https://avd.khulnasoft.com/nvd/CVE-2019-0001",
+							PublishedDate:    nil,
+							LastModifiedDate: nil,
+						},
+					},
+				}},
+			},
+			want: []report.Result{
+				{
+					Target: "alpine:3.10",
+					Type:   vulnerability.Alpine,
 					Vulnerabilities: []types.DetectedVulnerability{
 						{
 							VulnerabilityID:  "CVE-2019-0001",
@@ -450,19 +437,16 @@ func TestConvertFromRPCResults(t *testing.T) {
 								Digest: "sha256:154ad0735c360b212b167f424d33a62305770a1fcfb6363882f5c436cfbd9812",
 								DiffID: "sha256:b2a1a2d80bf0c747a4f6b0ca6af5eef23f043fcdb1ed4f3a3e750aef2dc68079",
 							},
-							SeveritySource: vulnerability.NVD,
+							SeveritySource: vulnerability.Nvd,
 							PrimaryURL:     "https://avd.khulnasoft.com/nvd/CVE-2019-0001",
 							Vulnerability: dbTypes.Vulnerability{
-								Title:       "DoS",
-								Description: "Denial of Service",
-								Severity:    common.Severity_MEDIUM.String(),
-								CweIDs: []string{
-									"CWE-123",
-									"CWE-456",
-								},
-								VendorSeverity: make(dbTypes.VendorSeverity),
+								Title:          "DoS",
+								Description:    "Denial of Service",
+								Severity:       common.Severity_MEDIUM.String(),
+								CweIDs:         []string{"CWE-123", "CWE-456"},
+								VendorSeverity: nil,
 								CVSS: dbTypes.VendorCVSS{
-									vulnerability.RedHat: {
+									"redhat": {
 										V2Vector: "AV:L/AC:L/Au:N/C:C/I:C/A:C",
 										V3Vector: "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H",
 										V2Score:  7.2,
@@ -481,358 +465,6 @@ func TestConvertFromRPCResults(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := ConvertFromRPCResults(tt.args.rpcResults)
 			assert.Equal(t, tt.want, got, tt.name)
-		})
-	}
-}
-
-func TestConvertFromRPCMisconfs(t *testing.T) {
-	type args struct {
-		misconfs []*common.DetectedMisconfiguration
-	}
-	tests := []struct {
-		name string
-		args args
-		want []types.DetectedMisconfiguration
-	}{
-		{
-			name: "happy path misconf",
-			args: args{
-				misconfs: []*common.DetectedMisconfiguration{
-					{
-						Type:        "Dockerfile Security Check",
-						Id:          "DS005",
-						AvdId:       "AVD-DS-0005",
-						Title:       "ADD instead of COPY",
-						Description: "You should use COPY instead of ADD unless you want to extract a tar file. Note that an ADD command will extract a tar file, which adds the risk of Zip-based vulnerabilities. Accordingly, it is advised to use a COPY command, which does not extract tar files.",
-						Message:     "Consider using 'COPY . /app' command instead of 'ADD . /app'",
-						Namespace:   "builtin.dockerfile.DS005",
-						Query:       "data.builtin.dockerfile.DS005.deny",
-						Resolution:  "Use COPY instead of ADD",
-						Severity:    common.Severity_LOW,
-						PrimaryUrl:  "https://avd.khulnasoft.com/misconfig/ds005",
-						References: []string{
-							"https://docs.docker.com/engine/reference/builder/#add",
-							"https://avd.khulnasoft.com/misconfig/ds005",
-						},
-						Status: "FAIL",
-						Layer:  &common.Layer{},
-						CauseMetadata: &common.CauseMetadata{
-							Provider:  "Dockerfile",
-							Service:   "general",
-							StartLine: 3,
-							EndLine:   3,
-							Code: &common.Code{
-								Lines: []*common.Line{
-									{
-										Number:     3,
-										Content:    "ADD . /app",
-										IsCause:    true,
-										Annotation: "",
-										Truncated:  false,
-										FirstCause: true,
-										LastCause:  true,
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			want: []types.DetectedMisconfiguration{
-				{
-					Type:        "Dockerfile Security Check",
-					ID:          "DS005",
-					AVDID:       "AVD-DS-0005",
-					Title:       "ADD instead of COPY",
-					Description: "You should use COPY instead of ADD unless you want to extract a tar file. Note that an ADD command will extract a tar file, which adds the risk of Zip-based vulnerabilities. Accordingly, it is advised to use a COPY command, which does not extract tar files.",
-					Message:     "Consider using 'COPY . /app' command instead of 'ADD . /app'",
-					Namespace:   "builtin.dockerfile.DS005",
-					Query:       "data.builtin.dockerfile.DS005.deny",
-					Resolution:  "Use COPY instead of ADD",
-					Severity:    "LOW",
-					PrimaryURL:  "https://avd.khulnasoft.com/misconfig/ds005",
-					References: []string{
-						"https://docs.docker.com/engine/reference/builder/#add",
-						"https://avd.khulnasoft.com/misconfig/ds005",
-					},
-					Status: "FAIL",
-					Layer:  ftypes.Layer{},
-					CauseMetadata: ftypes.CauseMetadata{
-						Provider:  "Dockerfile",
-						Service:   "general",
-						StartLine: 3,
-						EndLine:   3,
-						Code: ftypes.Code{
-							Lines: []ftypes.Line{
-								{
-									Number:     3,
-									Content:    "ADD . /app",
-									IsCause:    true,
-									Annotation: "",
-									Truncated:  false,
-									FirstCause: true,
-									LastCause:  true,
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := ConvertFromRPCMisconfs(tt.args.misconfs)
-			assert.Equal(t, tt.want, got, tt.name)
-		})
-	}
-}
-
-func TestConvertToRPCMiconfs(t *testing.T) {
-	type args struct {
-		misconfs []types.DetectedMisconfiguration
-	}
-	tests := []struct {
-		name string
-		args args
-		want []*common.DetectedMisconfiguration
-	}{
-		{
-			name: "happy path misconf",
-			args: args{
-				misconfs: []types.DetectedMisconfiguration{
-					{
-						Type:        "Dockerfile Security Check",
-						ID:          "DS005",
-						AVDID:       "AVD-DS-0005",
-						Title:       "ADD instead of COPY",
-						Description: "You should use COPY instead of ADD unless you want to extract a tar file. Note that an ADD command will extract a tar file, which adds the risk of Zip-based vulnerabilities. Accordingly, it is advised to use a COPY command, which does not extract tar files.",
-						Message:     "Consider using 'COPY . /app' command instead of 'ADD . /app'",
-						Namespace:   "builtin.dockerfile.DS005",
-						Query:       "data.builtin.dockerfile.DS005.deny",
-						Resolution:  "Use COPY instead of ADD",
-						Severity:    "LOW",
-						PrimaryURL:  "https://avd.khulnasoft.com/misconfig/ds005",
-						References: []string{
-							"https://docs.docker.com/engine/reference/builder/#add",
-							"https://avd.khulnasoft.com/misconfig/ds005",
-						},
-						Status: "FAIL",
-						Layer:  ftypes.Layer{},
-						CauseMetadata: ftypes.CauseMetadata{
-							Provider:  "Dockerfile",
-							Service:   "general",
-							StartLine: 3,
-							EndLine:   3,
-							Code: ftypes.Code{
-								Lines: []ftypes.Line{
-									{
-										Number:     3,
-										Content:    "ADD . /app",
-										IsCause:    true,
-										Annotation: "",
-										Truncated:  false,
-										FirstCause: true,
-										LastCause:  true,
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			want: []*common.DetectedMisconfiguration{
-				{
-					Type:        "Dockerfile Security Check",
-					Id:          "DS005",
-					AvdId:       "AVD-DS-0005",
-					Title:       "ADD instead of COPY",
-					Description: "You should use COPY instead of ADD unless you want to extract a tar file. Note that an ADD command will extract a tar file, which adds the risk of Zip-based vulnerabilities. Accordingly, it is advised to use a COPY command, which does not extract tar files.",
-					Message:     "Consider using 'COPY . /app' command instead of 'ADD . /app'",
-					Namespace:   "builtin.dockerfile.DS005",
-					Query:       "data.builtin.dockerfile.DS005.deny",
-					Resolution:  "Use COPY instead of ADD",
-					Severity:    common.Severity_LOW,
-					PrimaryUrl:  "https://avd.khulnasoft.com/misconfig/ds005",
-					References: []string{
-						"https://docs.docker.com/engine/reference/builder/#add",
-						"https://avd.khulnasoft.com/misconfig/ds005",
-					},
-					Status: "FAIL",
-					Layer:  &common.Layer{},
-					CauseMetadata: &common.CauseMetadata{
-						Provider:  "Dockerfile",
-						Service:   "general",
-						StartLine: 3,
-						EndLine:   3,
-						Code: &common.Code{
-							Lines: []*common.Line{
-								{
-									Number:     3,
-									Content:    "ADD . /app",
-									IsCause:    true,
-									Annotation: "",
-									Truncated:  false,
-									FirstCause: true,
-									LastCause:  true,
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := ConvertToRPCMisconfs(tt.args.misconfs)
-			assert.Equal(t, tt.want, got, tt.name)
-		})
-	}
-}
-
-func TestConvertFromRPCLicenses(t *testing.T) {
-	tests := []struct {
-		name        string
-		rpcLicenses []*common.DetectedLicense
-		want        []types.DetectedLicense
-	}{
-		{
-			name: "happy",
-			rpcLicenses: []*common.DetectedLicense{
-				{
-					Severity:   common.Severity_HIGH,
-					Category:   common.DetectedLicense_RESTRICTED,
-					PkgName:    "alpine-baselayout",
-					FilePath:   "some-path",
-					Name:       "GPL-2.0",
-					Confidence: 1,
-					Link:       "https://some-link",
-				},
-			},
-			want: []types.DetectedLicense{
-				{
-					Severity:   "HIGH",
-					Category:   "restricted",
-					PkgName:    "alpine-baselayout",
-					FilePath:   "some-path",
-					Name:       "GPL-2.0",
-					Confidence: 1,
-					Link:       "https://some-link",
-				},
-			},
-		},
-		{
-			name:        "no licenses",
-			rpcLicenses: nil,
-			want:        nil,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := ConvertFromRPCLicenses(tt.rpcLicenses)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
-func TestConvertToRPCLicenses(t *testing.T) {
-	tests := []struct {
-		name     string
-		licenses []types.DetectedLicense
-		want     []*common.DetectedLicense
-	}{
-		{
-			name: "happy",
-			licenses: []types.DetectedLicense{
-				{
-					Severity:   "HIGH",
-					Category:   "restricted",
-					PkgName:    "alpine-baselayout",
-					FilePath:   "some-path",
-					Name:       "GPL-2.0",
-					Confidence: 1,
-					Link:       "https://some-link",
-				},
-			},
-			want: []*common.DetectedLicense{
-				{
-					Severity:   common.Severity_HIGH,
-					Category:   common.DetectedLicense_RESTRICTED,
-					PkgName:    "alpine-baselayout",
-					FilePath:   "some-path",
-					Name:       "GPL-2.0",
-					Confidence: 1,
-					Link:       "https://some-link",
-				},
-			},
-		},
-		{
-			name:     "no licenses",
-			licenses: nil,
-			want:     nil,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := ConvertToRPCLicenses(tt.licenses)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
-func TestConvertToRPCLicenseCategory(t *testing.T) {
-	tests := []struct {
-		name     string
-		category ftypes.LicenseCategory
-		want     common.DetectedLicense_LicenseCategory
-	}{
-		{
-			name:     "happy",
-			category: ftypes.CategoryNotice,
-			want:     common.DetectedLicense_NOTICE,
-		},
-		{
-			name:     "unspecified",
-			category: "",
-			want:     common.DetectedLicense_UNSPECIFIED,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := ConvertToRPCLicenseCategory(tt.category)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
-func TestConvertFromRPCLicenseCategory(t *testing.T) {
-	tests := []struct {
-		name        string
-		rpcCategory common.DetectedLicense_LicenseCategory
-		want        ftypes.LicenseCategory
-	}{
-		{
-			name:        "happy",
-			rpcCategory: common.DetectedLicense_RESTRICTED,
-			want:        ftypes.CategoryRestricted,
-		},
-		{
-			name:        "unspecified",
-			rpcCategory: common.DetectedLicense_UNSPECIFIED,
-			want:        "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := ConvertFromRPCLicenseCategory(tt.rpcCategory)
-			assert.Equal(t, tt.want, got)
 		})
 	}
 }

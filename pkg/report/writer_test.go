@@ -3,20 +3,20 @@ package report_test
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-
+	"github.com/khulnasoft-lab/vul/pkg/report"
 	"github.com/khulnasoft-lab/vul/pkg/types"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestResults_Failed(t *testing.T) {
 	tests := []struct {
 		name    string
-		results types.Results
+		results report.Results
 		want    bool
 	}{
 		{
 			name: "no vulnerabilities and misconfigurations",
-			results: types.Results{
+			results: report.Results{
 				{
 					Target: "test",
 					Type:   "test",
@@ -26,7 +26,7 @@ func TestResults_Failed(t *testing.T) {
 		},
 		{
 			name: "vulnerabilities found",
-			results: types.Results{
+			results: report.Results{
 				{
 					Target: "test",
 					Type:   "test",
@@ -39,40 +39,6 @@ func TestResults_Failed(t *testing.T) {
 				},
 			},
 			want: true,
-		},
-		{
-			name: "failed misconfigurations",
-			results: types.Results{
-				{
-					Target: "test",
-					Type:   "test",
-					Misconfigurations: []types.DetectedMisconfiguration{
-						{
-							Type:   "Docker Security Check",
-							ID:     "ID-001",
-							Status: types.StatusFailure,
-						},
-					},
-				},
-			},
-			want: true,
-		},
-		{
-			name: "passed misconfigurations",
-			results: types.Results{
-				{
-					Target: "test",
-					Type:   "test",
-					Misconfigurations: []types.DetectedMisconfiguration{
-						{
-							Type:   "Docker Security Check",
-							ID:     "ID-001",
-							Status: types.StatusPassed,
-						},
-					},
-				},
-			},
-			want: false,
 		},
 	}
 	for _, tt := range tests {

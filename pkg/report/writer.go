@@ -2,115 +2,63 @@ package report
 
 import (
 	"io"
-	"strings"
-	"sync"
+	"time"
 
 	"golang.org/x/xerrors"
 
-	cr "github.com/khulnasoft-lab/vul/pkg/compliance/report"
-	ftypes "github.com/khulnasoft-lab/vul/pkg/fanal/types"
-	"github.com/khulnasoft-lab/vul/pkg/flag"
-	"github.com/khulnasoft-lab/vul/pkg/log"
-	"github.com/khulnasoft-lab/vul/pkg/report/cyclonedx"
-	"github.com/khulnasoft-lab/vul/pkg/report/github"
-	"github.com/khulnasoft-lab/vul/pkg/report/predicate"
-	"github.com/khulnasoft-lab/vul/pkg/report/spdx"
-	"github.com/khulnasoft-lab/vul/pkg/report/table"
+	ftypes "github.com/aquasecurity/fanal/types"
+	dbTypes "github.com/khulnasoft-lab/vul-db/pkg/types"
 	"github.com/khulnasoft-lab/vul/pkg/types"
 )
 
-const (
-	SchemaVersion = 2
-)
+// Now returns the current time
+var Now = time.Now
 
-// Write writes the result to output, format as passed in argument
-func Write(report types.Report, option flag.Options) error {
-	output, err := option.OutputWriter()
-	if err != nil {
-		return xerrors.Errorf("failed to create a file: %w", err)
+// Results to hold list of Result
+type Results []Result
+
+// Result to hold image scan results
+type Result struct {
+	Target          string                        `json:"Target"`
+	Type            string                        `json:"Type,omitempty"`
+	Packages        []ftypes.Package              `json:"Packages,omitempty"`
+	Vulnerabilities []types.DetectedVulnerability `json:"Vulnerabilities,omitempty"`
+}
+
+// Failed returns whether the result includes any vulnerabilities
+func (results Results) Failed() bool {
+	for _, r := range results {
+		if len(r.Vulnerabilities) > 0 {
+			return true
+		}
 	}
-	defer output.Close()
+	return false
+}
 
-	// Compliance report
-	if option.Compliance.Spec.ID != "" {
-		return complianceWrite(report, option, output)
-	}
-
+// WriteResults writes the result to output, format as passed in argument
+func WriteResults(format string, output io.Writer, severities []dbTypes.Severity, results Results, outputTemplate string, light bool) error {
 	var writer Writer
-	switch option.Format {
-	case types.FormatTable:
-		writer = &table.Writer{
-			Output:               output,
-			Severities:           option.Severities,
-			Tree:                 option.DependencyTree,
-			ShowMessageOnce:      &sync.Once{},
-			IncludeNonFailures:   option.IncludeNonFailures,
-			Trace:                option.Trace,
-			LicenseRiskThreshold: option.LicenseRiskThreshold,
-			IgnoredLicenses:      option.IgnoredLicenses,
-		}
-	case types.FormatJSON:
+	switch format {
+	case "table":
+		writer = &TableWriter{Output: output, Light: light, Severities: severities}
+	case "json":
 		writer = &JSONWriter{Output: output}
-	case types.FormatGitHub:
-		writer = &github.Writer{
-			Output:  output,
-			Version: option.AppVersion,
-		}
-	case types.FormatCycloneDX:
-		// TODO: support xml format option with cyclonedx writer
-		writer = cyclonedx.NewWriter(output, option.AppVersion)
-	case types.FormatSPDX, types.FormatSPDXJSON:
-		writer = spdx.NewWriter(output, option.AppVersion, option.Format)
-	case types.FormatTemplate:
-		// We keep `sarif.tpl` template working for backward compatibility for a while.
-		if strings.HasPrefix(option.Template, "@") && strings.HasSuffix(option.Template, "sarif.tpl") {
-			log.Logger.Warn("Using `--template sarif.tpl` is deprecated. Please migrate to `--format sarif`. See https://github.com/khulnasoft-lab/vul/discussions/1571")
-			writer = &SarifWriter{
-				Output:  output,
-				Version: option.AppVersion,
-			}
-			break
-		}
+	case "template":
 		var err error
-		if writer, err = NewTemplateWriter(output, option.Template); err != nil {
+		if writer, err = NewTemplateWriter(output, outputTemplate); err != nil {
 			return xerrors.Errorf("failed to initialize template writer: %w", err)
 		}
-	case types.FormatSarif:
-		target := ""
-		if report.ArtifactType == ftypes.ArtifactFilesystem {
-			target = option.Target
-		}
-		writer = &SarifWriter{
-			Output:  output,
-			Version: option.AppVersion,
-			Target:  target,
-		}
-	case types.FormatCosignVuln:
-		writer = predicate.NewVulnWriter(output, option.AppVersion)
 	default:
-		return xerrors.Errorf("unknown format: %v", option.Format)
+		return xerrors.Errorf("unknown format: %v", format)
 	}
 
-	if err := writer.Write(report); err != nil {
+	if err := writer.Write(results); err != nil {
 		return xerrors.Errorf("failed to write results: %w", err)
 	}
 	return nil
 }
 
-func complianceWrite(report types.Report, opt flag.Options, output io.Writer) error {
-	complianceReport, err := cr.BuildComplianceReport([]types.Results{report.Results}, opt.Compliance)
-	if err != nil {
-		return xerrors.Errorf("compliance report build error: %w", err)
-	}
-	return cr.Write(complianceReport, cr.Option{
-		Format:     opt.Format,
-		Report:     opt.ReportFormat,
-		Output:     output,
-		Severities: opt.Severities,
-	})
-}
-
 // Writer defines the result write operation
 type Writer interface {
-	Write(types.Report) error
+	Write(Results) error
 }

@@ -1,76 +1,32 @@
 project_name: vul
 builds:
-  - id: build-linux
+  -
     main: cmd/vul/main.go
     binary: vul
     ldflags:
       - -s -w
       - "-extldflags '-static'"
-      - -X github.com/khulnasoft-lab/vul/pkg/version.ver={{.Version}}
-    env:
-      - CGO_ENABLED=0
-    goos:
-      - linux
-    goarch:
-      - 386
-      - arm
-      - amd64
-      - arm64
-      - s390x
-      - ppc64le
-    goarm:
-      - 7
-  - id: build-bsd
-    main: cmd/vul/main.go
-    binary: vul
-    ldflags:
-      - -s -w
-      - "-extldflags '-static'"
-      - -X github.com/khulnasoft-lab/vul/pkg/version.ver={{.Version}}
-    env:
-      - CGO_ENABLED=0
-    goos:
-      - freebsd
-    goarch:
-      # modernc.org/sqlite doesn't support freebsd/arm64, etc.
-      - 386
-      - amd64
-  - id: build-macos
-    main: cmd/vul/main.go
-    binary: vul
-    ldflags:
-      - -s -w
-      - "-extldflags '-static'"
-      - -X github.com/khulnasoft-lab/vul/pkg/version.ver={{.Version}}
+      - -X main.version={{.Version}}
     env:
       - CGO_ENABLED=0
     goos:
       - darwin
+      - linux
+      - freebsd
+      - openbsd
     goarch:
       - amd64
+      - 386
+      - arm
       - arm64
+      - ppc64le
     goarm:
       - 7
-  - id: build-windows
-    main: cmd/vul/main.go
-    binary: vul
-    ldflags:
-      - -s -w
-      - "-extldflags '-static'"
-      - -X github.com/khulnasoft-lab/vul/pkg/version.ver={{.Version}}
-    env:
-      - CGO_ENABLED=0
-    goos:
-      - windows
-    goarch:
-      # modernc.org/sqlite doesn't support windows/386 and windows/arm, etc.
-      - amd64
-    goarm:
-      - 7
+    ignore:
+      - goos: darwin
+        goarch: 386
 
 release:
-    extra_files:
-      - glob: ./bom.json
     discussion_category_name: Announcements
 
 nfpms:
@@ -80,66 +36,54 @@ nfpms:
       - rpm
     vendor: "khulnasoft-lab"
     homepage: "https://github.com/khulnasoft-lab"
-    maintainer: "Teppei Fukuda <khulnasoft-lab@gmail.com>"
+    maintainer: "KhulnaSoft DevOps <knqyf263@gmail.com>"
     description: "A Fast Vulnerability Scanner for Containers"
     license: "Apache-2.0"
-    file_name_template: >-
-      {{ .ProjectName }}_{{ .Version }}_
-      {{- if eq .Os "darwin" }}macOS
-      {{- else if eq .Os "openbsd" }}OpenBSD
-      {{- else if eq .Os "netbsd" }}NetBSD
-      {{- else if eq .Os "freebsd" }}FreeBSD
-      {{- else if eq .Os "dragonfly" }}DragonFlyBSD
-      {{- else}}{{- title .Os }}{{ end }}-
-      {{- if eq .Arch "amd64" }}64bit
-      {{- else if eq .Arch "386" }}32bit
-      {{- else if eq .Arch "arm" }}ARM
-      {{- else if eq .Arch "arm64" }}ARM64
-      {{- else if eq .Arch "ppc64le" }}PPC64LE
-      {{- else }}{{ .Arch }}{{ end }}
-    contents:
-     - src: contrib/*.tpl
-       dst: /usr/local/share/vul/templates
-    rpm:
-      signature:
-         key_file: '{{ .Env.GPG_FILE }}'
+    file_name_template: "{{.ProjectName}}_{{.Version}}_{{.Os}}-{{.Arch}}"
+    replacements:
+      amd64: 64bit
+      386: 32bit
+      arm: ARM
+      arm64: ARM64
+      ppc64le: PPC64LE
+      darwin: macOS
+      linux: Linux
+      openbsd: OpenBSD
+      netbsd: NetBSD
+      freebsd: FreeBSD
+      dragonfly: DragonFlyBSD
 
 archives:
-  - id: archive
+  -
     format: tar.gz
-    name_template: >-
-      {{ .ProjectName }}_{{ .Version }}_
-      {{- if eq .Os "darwin" }}macOS
-      {{- else if eq .Os "linux" }}Linux
-      {{- else if eq .Os "openbsd" }}OpenBSD
-      {{- else if eq .Os "netbsd" }}NetBSD
-      {{- else if eq .Os "freebsd" }}FreeBSD
-      {{- else if eq .Os "dragonfly" }}DragonFlyBSD
-      {{- else}}{{- .Os }}{{ end }}-
-      {{- if eq .Arch "amd64" }}64bit
-      {{- else if eq .Arch "386" }}32bit
-      {{- else if eq .Arch "arm" }}ARM
-      {{- else if eq .Arch "arm64" }}ARM64
-      {{- else if eq .Arch "ppc64le" }}PPC64LE
-      {{- else }}{{ .Arch }}{{ end }}
+    name_template: "{{.ProjectName}}_{{.Version}}_{{.Os}}-{{.Arch}}"
+    replacements:
+      amd64: 64bit
+      386: 32bit
+      arm: ARM
+      arm64: ARM64
+      ppc64le: PPC64LE
+      darwin: macOS
+      linux: Linux
+      openbsd: OpenBSD
+      netbsd: NetBSD
+      freebsd: FreeBSD
+      dragonfly: DragonFlyBSD
     files:
       - README.md
       - LICENSE
       - contrib/*.tpl
-    format_overrides:
-      - goos: windows
-        format: zip
 
 
 brews:
   -
-    repository:
-      owner: khulnasoft-lab
+    tap:
+      owner: aquasecurity
       name: homebrew-vul
     homepage: "https://github.com/khulnasoft-lab/vul"
-    description: "Scanner for vulnerabilities in container images, file systems, and Git repositories, as well as for configuration issues"
+    description: ""
     test: |
-      system "#{bin}/vul", "--version"
+      system "#{bin}/program --version"
 
 dockers:
   - image_templates:
@@ -149,21 +93,20 @@ dockers:
       - "ghcr.io/khulnasoft-lab/vul:latest-amd64"
       - "public.ecr.aws/khulnasoft-lab/vul:latest-amd64"
       - "public.ecr.aws/khulnasoft-lab/vul:{{ .Version }}-amd64"
-    use: buildx
+    use_buildx: true
     goos: linux
     goarch: amd64
     ids:
-      - build-linux
+      - vul
     build_flag_templates:
-      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
-      - "--label=org.opencontainers.image.description=A Fast Vulnerability Scanner for Containers"
-      - "--label=org.opencontainers.image.vendor=Khulnasoft Security"
-      - "--label=org.opencontainers.image.version={{ .Version }}"
-      - "--label=org.opencontainers.image.created={{ .Date }}"
-      - "--label=org.opencontainers.image.source=https://github.com/khulnasoft-lab/vul"
-      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
-      - "--label=org.opencontainers.image.url=https://www.khulnasoft.com/products/vul/"
-      - "--label=org.opencontainers.image.documentation=https://khulnasoft-lab.github.io/vul/v{{ .Version }}/"
+      - "--label=org.label-schema.schema-version=1.0"
+      - "--label=org.label-schema.name={{ .ProjectName }}"
+      - "--label=org.label-schema.description=A Fast Vulnerability Scanner for Containers"
+      - "--label=org.label-schema.vendor=KhulnaSoft Security"
+      - "--label=org.label-schema.version={{ .Version }}"
+      - "--label=org.label-schema.build-date={{ .Date }}"
+      - "--label=org.label-schema.vcs=https://github.com/khulnasoft-lab/vul"
+      - "--label=org.label-schema.vcs-ref={{ .FullCommit }}"
       - "--platform=linux/amd64"
     extra_files:
     - contrib/
@@ -174,136 +117,46 @@ dockers:
       - "ghcr.io/khulnasoft-lab/vul:latest-arm64"
       - "public.ecr.aws/khulnasoft-lab/vul:latest-arm64"
       - "public.ecr.aws/khulnasoft-lab/vul:{{ .Version }}-arm64"
-    use: buildx
+    use_buildx: true
     goos: linux
     goarch: arm64
     ids:
-      - build-linux
+      - vul
     build_flag_templates:
-      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
-      - "--label=org.opencontainers.image.description=A Fast Vulnerability Scanner for Containers"
-      - "--label=org.opencontainers.image.vendor=Khulnasoft Security"
-      - "--label=org.opencontainers.image.version={{ .Version }}"
-      - "--label=org.opencontainers.image.created={{ .Date }}"
-      - "--label=org.opencontainers.image.source=https://github.com/khulnasoft-lab/vul"
-      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
-      - "--label=org.opencontainers.image.url=https://www.khulnasoft.com/products/vul/"
-      - "--label=org.opencontainers.image.documentation=https://khulnasoft-lab.github.io/vul/v{{ .Version }}/"
+      - "--label=org.label-schema.schema-version=1.0"
+      - "--label=org.label-schema.name={{ .ProjectName }}"
+      - "--label=org.label-schema.description=A Fast Vulnerability Scanner for Containers"
+      - "--label=org.label-schema.vendor=KhulnaSoft Security"
+      - "--label=org.label-schema.version={{ .Version }}"
+      - "--label=org.label-schema.build-date={{ .Date }}"
+      - "--label=org.label-schema.vcs=https://github.com/khulnasoft-lab/vul"
+      - "--label=org.label-schema.vcs-ref={{ .FullCommit }}"
       - "--platform=linux/arm64"
-    extra_files:
-    - contrib/
-  - image_templates:
-      - "docker.io/khulnasoft/vul:{{ .Version }}-s390x"
-      - "docker.io/khulnasoft/vul:latest-s390x"
-      - "ghcr.io/khulnasoft-lab/vul:{{ .Version }}-s390x"
-      - "ghcr.io/khulnasoft-lab/vul:latest-s390x"
-      - "public.ecr.aws/khulnasoft-lab/vul:latest-s390x"
-      - "public.ecr.aws/khulnasoft-lab/vul:{{ .Version }}-s390x"
-    use: buildx
-    goos: linux
-    goarch: s390x
-    ids:
-      - build-linux
-    build_flag_templates:
-      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
-      - "--label=org.opencontainers.image.description=A Fast Vulnerability Scanner for Containers"
-      - "--label=org.opencontainers.image.vendor=Khulnasoft Security"
-      - "--label=org.opencontainers.image.version={{ .Version }}"
-      - "--label=org.opencontainers.image.created={{ .Date }}"
-      - "--label=org.opencontainers.image.source=https://github.com/khulnasoft-lab/vul"
-      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
-      - "--label=org.opencontainers.image.url=https://www.khulnasoft.com/products/vul/"
-      - "--label=org.opencontainers.image.documentation=https://khulnasoft-lab.github.io/vul/v{{ .Version }}/"
-      - "--platform=linux/s390x"
-    extra_files:
-    - contrib/
-  - image_templates:
-      - "docker.io/khulnasoft/vul:{{ .Version }}-ppc64le"
-      - "docker.io/khulnasoft/vul:latest-ppc64le"
-      - "ghcr.io/khulnasoft-lab/vul:{{ .Version }}-ppc64le"
-      - "ghcr.io/khulnasoft-lab/vul:latest-ppc64le"
-      - "public.ecr.aws/khulnasoft-lab/vul:latest-ppc64le"
-      - "public.ecr.aws/khulnasoft-lab/vul:{{ .Version }}-ppc64le"
-    use: buildx
-    goos: linux
-    goarch: ppc64le
-    ids:
-      - build-linux
-    build_flag_templates:
-      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
-      - "--label=org.opencontainers.image.description=A Fast Vulnerability Scanner for Containers"
-      - "--label=org.opencontainers.image.vendor=Khulnasoft Security"
-      - "--label=org.opencontainers.image.version={{ .Version }}"
-      - "--label=org.opencontainers.image.created={{ .Date }}"
-      - "--label=org.opencontainers.image.source=https://github.com/khulnasoft-lab/vul"
-      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
-      - "--label=org.opencontainers.image.url=https://www.khulnasoft.com/products/vul/"
-      - "--label=org.opencontainers.image.documentation=https://khulnasoft-lab.github.io/vul/v{{ .Version }}/"
-      - "--platform=linux/ppc64le"
     extra_files:
     - contrib/
 
 docker_manifests:
-  - name_template: 'khulnasoft/vul:{{ .Version }}'
+  - name_template: 'aquasec/vul:{{ .Version }}'
     image_templates:
-    - 'khulnasoft/vul:{{ .Version }}-amd64'
-    - 'khulnasoft/vul:{{ .Version }}-arm64'
-    - 'khulnasoft/vul:{{ .Version }}-s390x'
-    - 'khulnasoft/vul:{{ .Version }}-ppc64le'
+    - 'aquasec/vul:{{ .Version }}-amd64'
+    - 'aquasec/vul:{{ .Version }}-arm64'
   - name_template: 'ghcr.io/khulnasoft-lab/vul:{{ .Version }}'
     image_templates:
     - 'ghcr.io/khulnasoft-lab/vul:{{ .Version }}-amd64'
     - 'ghcr.io/khulnasoft-lab/vul:{{ .Version }}-arm64'
-    - 'ghcr.io/khulnasoft-lab/vul:{{ .Version }}-s390x'
-    - 'ghcr.io/khulnasoft-lab/vul:{{ .Version }}-ppc64le'
   - name_template: 'public.ecr.aws/khulnasoft-lab/vul:{{ .Version }}'
     image_templates:
     - 'public.ecr.aws/khulnasoft-lab/vul:{{ .Version }}-amd64'
     - 'public.ecr.aws/khulnasoft-lab/vul:{{ .Version }}-arm64'
-    - 'public.ecr.aws/khulnasoft-lab/vul:{{ .Version }}-s390x'
-    - 'public.ecr.aws/khulnasoft-lab/vul:{{ .Version }}-ppc64le'
-  - name_template: 'khulnasoft/vul:latest'
+  - name_template: 'aquasec/vul:latest'
     image_templates:
-    - 'khulnasoft/vul:{{ .Version }}-amd64'
-    - 'khulnasoft/vul:{{ .Version }}-arm64'
-    - 'khulnasoft/vul:{{ .Version }}-s390x'
-    - 'khulnasoft/vul:{{ .Version }}-ppc64le'
+    - 'aquasec/vul:{{ .Version }}-amd64'
+    - 'aquasec/vul:{{ .Version }}-arm64'
   - name_template: 'ghcr.io/khulnasoft-lab/vul:latest'
     image_templates:
     - 'ghcr.io/khulnasoft-lab/vul:{{ .Version }}-amd64'
     - 'ghcr.io/khulnasoft-lab/vul:{{ .Version }}-arm64'
-    - 'ghcr.io/khulnasoft-lab/vul:{{ .Version }}-s390x'
-    - 'ghcr.io/khulnasoft-lab/vul:{{ .Version }}-ppc64le'
   - name_template: 'public.ecr.aws/khulnasoft-lab/vul:latest'
-    image_templates:
+    image_templates: 
     - 'public.ecr.aws/khulnasoft-lab/vul:{{ .Version }}-amd64'
     - 'public.ecr.aws/khulnasoft-lab/vul:{{ .Version }}-arm64'
-    - 'public.ecr.aws/khulnasoft-lab/vul:{{ .Version }}-s390x'
-    - 'public.ecr.aws/khulnasoft-lab/vul:{{ .Version }}-ppc64le'
-
-signs:
-- cmd: cosign
-  env:
-  - COSIGN_EXPERIMENTAL=1
-  signature: "${artifact}.sig"
-  certificate: "${artifact}.pem"
-  args:
-    - "sign-blob"
-    - "--oidc-issuer=https://token.actions.githubusercontent.com"
-    - "--output-certificate=${certificate}"
-    - "--output-signature=${signature}"
-    - "${artifact}"
-    - "--yes"
-  artifacts: all
-  output: true
-
-docker_signs:
-- cmd: cosign
-  env:
-  - COSIGN_EXPERIMENTAL=1
-  artifacts: manifests
-  output: true
-  args:
-  - 'sign'
-  - '${artifact}'
-  - '--yes'

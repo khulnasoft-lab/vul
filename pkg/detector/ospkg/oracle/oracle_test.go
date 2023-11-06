@@ -9,19 +9,17 @@ import (
 	"k8s.io/utils/clock"
 	clocktesting "k8s.io/utils/clock/testing"
 
+	ftypes "github.com/aquasecurity/fanal/types"
 	"github.com/khulnasoft-lab/vul-db/pkg/db"
-	dbTypes "github.com/khulnasoft-lab/vul-db/pkg/types"
 	oracleoval "github.com/khulnasoft-lab/vul-db/pkg/vulnsrc/oracle-oval"
-	"github.com/khulnasoft-lab/vul-db/pkg/vulnsrc/vulnerability"
 	"github.com/khulnasoft-lab/vul/pkg/dbtest"
-	ftypes "github.com/khulnasoft-lab/vul/pkg/fanal/types"
 	"github.com/khulnasoft-lab/vul/pkg/types"
 )
 
 func TestScanner_IsSupportedVersion(t *testing.T) {
 	vectors := map[string]struct {
 		clock     clock.Clock
-		osFamily  ftypes.OSType
+		osFamily  string
 		osVersion string
 		expected  bool
 	}{
@@ -73,11 +71,11 @@ func TestScanner_IsSupportedVersion(t *testing.T) {
 			osVersion: "8",
 			expected:  false,
 		},
-		"latest": {
+		"unknown": {
 			clock:     clocktesting.NewFakeClock(time.Date(2019, 5, 31, 23, 59, 59, 0, time.UTC)),
 			osFamily:  "oracle",
-			osVersion: "latest",
-			expected:  true,
+			osVersion: "unknown",
+			expected:  false,
 		},
 	}
 
@@ -109,11 +107,8 @@ func TestScanner_Detect(t *testing.T) {
 		wantErr  string
 	}{
 		{
-			name: "detected",
-			fixtures: []string{
-				"testdata/fixtures/oracle7.yaml",
-				"testdata/fixtures/data-source.yaml",
-			},
+			name:     "detected",
+			fixtures: []string{"testdata/fixtures/oracle7.yaml"},
 			args: args{
 				osVer: "7",
 				pkgs: []ftypes.Package{
@@ -134,20 +129,12 @@ func TestScanner_Detect(t *testing.T) {
 					PkgName:          "curl",
 					InstalledVersion: "7.29.0-59.0.1.el7",
 					FixedVersion:     "7.29.0-59.0.1.el7_9.1",
-					DataSource: &dbTypes.DataSource{
-						ID:   vulnerability.OracleOVAL,
-						Name: "Oracle Linux OVAL definitions",
-						URL:  "https://linux.oracle.com/security/oval/",
-					},
 				},
 			},
 		},
 		{
-			name: "without ksplice",
-			fixtures: []string{
-				"testdata/fixtures/oracle7.yaml",
-				"testdata/fixtures/data-source.yaml",
-			},
+			name:     "without ksplice",
+			fixtures: []string{"testdata/fixtures/oracle7.yaml"},
 			args: args{
 				osVer: "7",
 				pkgs: []ftypes.Package{
@@ -165,35 +152,8 @@ func TestScanner_Detect(t *testing.T) {
 			want: nil,
 		},
 		{
-			name: "the installed version has ksplice2",
-			fixtures: []string{
-				"testdata/fixtures/oracle7.yaml",
-				"testdata/fixtures/data-source.yaml",
-			},
-			args: args{
-				osVer: "7",
-				pkgs: []ftypes.Package{
-					{
-						Name:       "glibc",
-						Epoch:      2,
-						Version:    "2.28",
-						Release:    "151.0.1.ksplice2.el8",
-						Arch:       "x86_64",
-						SrcEpoch:   2,
-						SrcName:    "glibc",
-						SrcVersion: "2.28",
-						SrcRelease: "151.0.1.ksplice2.el8",
-					},
-				},
-			},
-			want: nil,
-		},
-		{
-			name: "with ksplice",
-			fixtures: []string{
-				"testdata/fixtures/oracle7.yaml",
-				"testdata/fixtures/data-source.yaml",
-			},
+			name:     "with ksplice",
+			fixtures: []string{"testdata/fixtures/oracle7.yaml"},
 			args: args{
 				osVer: "7",
 				pkgs: []ftypes.Package{
@@ -216,20 +176,12 @@ func TestScanner_Detect(t *testing.T) {
 					PkgName:          "glibc",
 					InstalledVersion: "2:2.17-156.ksplice1.el7",
 					FixedVersion:     "2:2.17-157.ksplice1.el7_3.4",
-					DataSource: &dbTypes.DataSource{
-						ID:   vulnerability.OracleOVAL,
-						Name: "Oracle Linux OVAL definitions",
-						URL:  "https://linux.oracle.com/security/oval/",
-					},
 				},
 			},
 		},
 		{
-			name: "malformed",
-			fixtures: []string{
-				"testdata/fixtures/invalid-type.yaml",
-				"testdata/fixtures/data-source.yaml",
-			},
+			name:     "malformed",
+			fixtures: []string{"testdata/fixtures/invalid-type.yaml"},
 			args: args{
 				osVer: "7",
 				pkgs: []ftypes.Package{
@@ -254,7 +206,7 @@ func TestScanner_Detect(t *testing.T) {
 			defer db.Close()
 
 			s := NewScanner()
-			got, err := s.Detect(tt.args.osVer, nil, tt.args.pkgs)
+			got, err := s.Detect(tt.args.osVer, tt.args.pkgs)
 			if tt.wantErr != "" {
 				require.NotNil(t, err)
 				assert.Contains(t, err.Error(), tt.wantErr)

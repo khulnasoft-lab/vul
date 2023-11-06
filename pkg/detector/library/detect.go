@@ -3,15 +3,15 @@ package library
 import (
 	"golang.org/x/xerrors"
 
-	ftypes "github.com/khulnasoft-lab/vul/pkg/fanal/types"
+	ftypes "github.com/aquasecurity/fanal/types"
 	"github.com/khulnasoft-lab/vul/pkg/types"
 )
 
 // Detect scans and returns vulnerabilities of library
-func Detect(libType ftypes.LangType, pkgs []ftypes.Package) ([]types.DetectedVulnerability, error) {
-	driver, ok := NewDriver(libType)
-	if !ok {
-		return nil, nil
+func Detect(libType string, pkgs []ftypes.LibraryInfo) ([]types.DetectedVulnerability, error) {
+	driver, err := NewDriver(libType)
+	if err != nil {
+		return nil, xerrors.Errorf("failed to new driver: %w", err)
 	}
 
 	vulns, err := detect(driver, pkgs)
@@ -22,18 +22,16 @@ func Detect(libType ftypes.LangType, pkgs []ftypes.Package) ([]types.DetectedVul
 	return vulns, nil
 }
 
-func detect(driver Driver, libs []ftypes.Package) ([]types.DetectedVulnerability, error) {
+func detect(driver Driver, libs []ftypes.LibraryInfo) ([]types.DetectedVulnerability, error) {
 	var vulnerabilities []types.DetectedVulnerability
 	for _, lib := range libs {
-		vulns, err := driver.DetectVulnerabilities(lib.ID, lib.Name, lib.Version)
+		vulns, err := driver.Detect(lib.Library.Name, lib.Library.Version)
 		if err != nil {
 			return nil, xerrors.Errorf("failed to detect %s vulnerabilities: %w", driver.Type(), err)
 		}
 
 		for i := range vulns {
 			vulns[i].Layer = lib.Layer
-			vulns[i].PkgPath = lib.FilePath
-			vulns[i].PkgRef = lib.Ref
 		}
 		vulnerabilities = append(vulnerabilities, vulns...)
 	}

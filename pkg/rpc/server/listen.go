@@ -2,80 +2,74 @@ package server
 
 import (
 	"context"
-	"encoding/json"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"sync"
 	"time"
 
-	"github.com/NYTimes/gziphandler"
+	"github.com/google/wire"
 	"github.com/twitchtv/twirp"
 	"golang.org/x/xerrors"
 
+	"github.com/aquasecurity/fanal/cache"
 	"github.com/khulnasoft-lab/vul-db/pkg/db"
-	"github.com/khulnasoft-lab/vul-db/pkg/metadata"
-	dbc "github.com/khulnasoft-lab/vul/pkg/db"
-	"github.com/khulnasoft-lab/vul/pkg/fanal/cache"
-	"github.com/khulnasoft-lab/vul/pkg/fanal/types"
+	dbFile "github.com/khulnasoft-lab/vul/pkg/db"
 	"github.com/khulnasoft-lab/vul/pkg/log"
-	"github.com/khulnasoft-lab/vul/pkg/utils/fsutils"
-	"github.com/khulnasoft-lab/vul/pkg/version"
+	"github.com/khulnasoft-lab/vul/pkg/utils"
 	rpcCache "github.com/khulnasoft-lab/vul/rpc/cache"
 	rpcScanner "github.com/khulnasoft-lab/vul/rpc/scanner"
 )
 
-const updateInterval = 1 * time.Hour
+// DBWorkerSuperSet binds the dependencies for Vul DB worker
+var DBWorkerSuperSet = wire.NewSet(
+	dbFile.SuperSet,
+	newDBWorker,
+)
 
 // Server represents Vul server
 type Server struct {
-	appVersion   string
-	addr         string
-	cacheDir     string
-	token        string
-	tokenHeader  string
-	dbRepository string
-
-	// For OCI registries
-	types.RegistryOptions
+	appVersion  string
+	addr        string
+	cacheDir    string
+	token       string
+	tokenHeader string
 }
 
 // NewServer returns an instance of Server
-func NewServer(appVersion, addr, cacheDir, token, tokenHeader, dbRepository string, opt types.RegistryOptions) Server {
+func NewServer(appVersion, addr, cacheDir, token, tokenHeader string) Server {
 	return Server{
-		appVersion:      appVersion,
-		addr:            addr,
-		cacheDir:        cacheDir,
-		token:           token,
-		tokenHeader:     tokenHeader,
-		dbRepository:    dbRepository,
-		RegistryOptions: opt,
+		appVersion:  appVersion,
+		addr:        addr,
+		cacheDir:    cacheDir,
+		token:       token,
+		tokenHeader: tokenHeader,
 	}
 }
 
 // ListenAndServe starts Vul server
-func (s Server) ListenAndServe(serverCache cache.Cache, skipDBUpdate bool) error {
+func (s Server) ListenAndServe(serverCache cache.Cache) error {
 	requestWg := &sync.WaitGroup{}
 	dbUpdateWg := &sync.WaitGroup{}
 
 	go func() {
-		worker := newDBWorker(dbc.NewClient(s.cacheDir, true, dbc.WithDBRepository(s.dbRepository)))
+		worker := initializeDBWorker(s.cacheDir, true)
 		ctx := context.Background()
 		for {
-			time.Sleep(updateInterval)
-			if err := worker.update(ctx, s.appVersion, s.cacheDir, skipDBUpdate, dbUpdateWg, requestWg, s.RegistryOptions); err != nil {
+			time.Sleep(1 * time.Hour)
+			if err := worker.update(ctx, s.appVersion, s.cacheDir, dbUpdateWg, requestWg); err != nil {
 				log.Logger.Errorf("%+v\n", err)
 			}
 		}
 	}()
 
-	mux := newServeMux(serverCache, dbUpdateWg, requestWg, s.token, s.tokenHeader, s.cacheDir)
+	mux := newServeMux(serverCache, dbUpdateWg, requestWg, s.token, s.tokenHeader)
 	log.Logger.Infof("Listening %s...", s.addr)
 
 	return http.ListenAndServe(s.addr, mux)
 }
 
-func newServeMux(serverCache cache.Cache, dbUpdateWg, requestWg *sync.WaitGroup,
-	token, tokenHeader, cacheDir string) *http.ServeMux {
+func newServeMux(serverCache cache.Cache, dbUpdateWg, requestWg *sync.WaitGroup, token, tokenHeader string) *http.ServeMux {
 	withWaitGroup := func(base http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Stop processing requests during DB update
@@ -92,25 +86,15 @@ func newServeMux(serverCache cache.Cache, dbUpdateWg, requestWg *sync.WaitGroup,
 
 	mux := http.NewServeMux()
 
-	scanServer := rpcScanner.NewScannerServer(initializeScanServer(serverCache), nil)
-	scanHandler := withToken(withWaitGroup(scanServer), token, tokenHeader)
-	mux.Handle(rpcScanner.ScannerPathPrefix, gziphandler.GzipHandler(scanHandler))
+	scanHandler := rpcScanner.NewScannerServer(initializeScanServer(serverCache), nil)
+	mux.Handle(rpcScanner.ScannerPathPrefix, withToken(withWaitGroup(scanHandler), token, tokenHeader))
 
-	layerServer := rpcCache.NewCacheServer(NewCacheServer(serverCache), nil)
-	layerHandler := withToken(withWaitGroup(layerServer), token, tokenHeader)
-	mux.Handle(rpcCache.CachePathPrefix, gziphandler.GzipHandler(layerHandler))
+	layerHandler := rpcCache.NewCacheServer(NewCacheServer(serverCache), nil)
+	mux.Handle(rpcCache.CachePathPrefix, withToken(withWaitGroup(layerHandler), token, tokenHeader))
 
 	mux.HandleFunc("/healthz", func(rw http.ResponseWriter, r *http.Request) {
 		if _, err := rw.Write([]byte("ok")); err != nil {
 			log.Logger.Errorf("health check error: %s", err)
-		}
-	})
-
-	mux.HandleFunc("/version", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Add("Content-Type", "application/json")
-
-		if err := json.NewEncoder(w).Encode(version.NewVersionInfo(cacheDir)); err != nil {
-			log.Logger.Errorf("get version error: %s", err)
 		}
 	})
 
@@ -128,17 +112,17 @@ func withToken(base http.Handler, token, tokenHeader string) http.Handler {
 }
 
 type dbWorker struct {
-	dbClient dbc.Operation
+	dbClient dbFile.Operation
 }
 
-func newDBWorker(dbClient dbc.Operation) dbWorker {
+func newDBWorker(dbClient dbFile.Operation) dbWorker {
 	return dbWorker{dbClient: dbClient}
 }
 
 func (w dbWorker) update(ctx context.Context, appVersion, cacheDir string,
-	skipDBUpdate bool, dbUpdateWg, requestWg *sync.WaitGroup, opt types.RegistryOptions) error {
+	dbUpdateWg, requestWg *sync.WaitGroup) error {
 	log.Logger.Debug("Check for DB update...")
-	needsUpdate, err := w.dbClient.NeedsUpdate(appVersion, skipDBUpdate)
+	needsUpdate, err := w.dbClient.NeedsUpdate(appVersion, false, false)
 	if err != nil {
 		return xerrors.Errorf("failed to check if db needs an update")
 	} else if !needsUpdate {
@@ -146,20 +130,20 @@ func (w dbWorker) update(ctx context.Context, appVersion, cacheDir string,
 	}
 
 	log.Logger.Info("Updating DB...")
-	if err = w.hotUpdate(ctx, cacheDir, dbUpdateWg, requestWg, opt); err != nil {
-		return xerrors.Errorf("failed DB hot update: %w", err)
+	if err = w.hotUpdate(ctx, cacheDir, dbUpdateWg, requestWg); err != nil {
+		return xerrors.Errorf("failed DB hot update")
 	}
 	return nil
 }
 
-func (w dbWorker) hotUpdate(ctx context.Context, cacheDir string, dbUpdateWg, requestWg *sync.WaitGroup, opt types.RegistryOptions) error {
-	tmpDir, err := os.MkdirTemp("", "db")
+func (w dbWorker) hotUpdate(ctx context.Context, cacheDir string, dbUpdateWg, requestWg *sync.WaitGroup) error {
+	tmpDir, err := ioutil.TempDir("", "db")
 	if err != nil {
 		return xerrors.Errorf("failed to create a temp dir: %w", err)
 	}
 	defer os.RemoveAll(tmpDir)
 
-	if err = w.dbClient.Download(ctx, tmpDir, opt); err != nil {
+	if err = w.dbClient.Download(ctx, tmpDir, false); err != nil {
 		return xerrors.Errorf("failed to download vulnerability DB: %w", err)
 	}
 
@@ -174,14 +158,12 @@ func (w dbWorker) hotUpdate(ctx context.Context, cacheDir string, dbUpdateWg, re
 		return xerrors.Errorf("failed to close DB: %w", err)
 	}
 
-	// Copy vul.db
-	if _, err = fsutils.CopyFile(db.Path(tmpDir), db.Path(cacheDir)); err != nil {
+	if _, err = utils.CopyFile(db.Path(tmpDir), db.Path(cacheDir)); err != nil {
 		return xerrors.Errorf("failed to copy the database file: %w", err)
 	}
 
-	// Copy metadata.json
-	if _, err = fsutils.CopyFile(metadata.Path(tmpDir), metadata.Path(cacheDir)); err != nil {
-		return xerrors.Errorf("failed to copy the metadata file: %w", err)
+	if err = w.dbClient.UpdateMetadata(cacheDir); err != nil {
+		return xerrors.Errorf("unable to update database metadata: %w", err)
 	}
 
 	log.Logger.Info("Reopening DB...")

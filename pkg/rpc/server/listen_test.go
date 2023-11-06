@@ -2,11 +2,12 @@ package server
 
 import (
 	"context"
-	"encoding/json"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -16,14 +17,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/xerrors"
 
+	"github.com/aquasecurity/fanal/cache"
 	"github.com/khulnasoft-lab/vul-db/pkg/db"
-	"github.com/khulnasoft-lab/vul-db/pkg/metadata"
 	dbFile "github.com/khulnasoft-lab/vul/pkg/db"
-	"github.com/khulnasoft-lab/vul/pkg/fanal/cache"
-	ftypes "github.com/khulnasoft-lab/vul/pkg/fanal/types"
-	"github.com/khulnasoft-lab/vul/pkg/policy"
-	"github.com/khulnasoft-lab/vul/pkg/utils/fsutils"
-	"github.com/khulnasoft-lab/vul/pkg/version"
 	rpcCache "github.com/khulnasoft-lab/vul/rpc/cache"
 )
 
@@ -57,24 +53,22 @@ func Test_dbWorker_update(t *testing.T) {
 		needsUpdate needsUpdate
 		download    download
 		args        args
-		want        metadata.Metadata
+		want        db.Metadata
 		wantErr     string
 	}{
 		{
 			name: "happy path",
 			needsUpdate: needsUpdate{
-				input: needsUpdateInput{
-					appVersion: "1",
-					skip:       false,
-				},
+				input:  needsUpdateInput{appVersion: "1", skip: false},
 				output: needsUpdateOutput{needsUpdate: true},
 			},
 			download: download{
 				call: true,
 			},
 			args: args{appVersion: "1"},
-			want: metadata.Metadata{
+			want: db.Metadata{
 				Version:    1,
+				Type:       db.TypeFull,
 				NextUpdate: timeNextUpdate,
 				UpdatedAt:  timeUpdateAt,
 			},
@@ -82,21 +76,7 @@ func Test_dbWorker_update(t *testing.T) {
 		{
 			name: "not update",
 			needsUpdate: needsUpdate{
-				input: needsUpdateInput{
-					appVersion: "1",
-					skip:       false,
-				},
-				output: needsUpdateOutput{needsUpdate: false},
-			},
-			args: args{appVersion: "1"},
-		},
-		{
-			name: "skip update",
-			needsUpdate: needsUpdate{
-				input: needsUpdateInput{
-					appVersion: "1",
-					skip:       true,
-				},
+				input:  needsUpdateInput{appVersion: "1", skip: false},
 				output: needsUpdateOutput{needsUpdate: false},
 			},
 			args: args{appVersion: "1"},
@@ -104,10 +84,7 @@ func Test_dbWorker_update(t *testing.T) {
 		{
 			name: "NeedsUpdate returns an error",
 			needsUpdate: needsUpdate{
-				input: needsUpdateInput{
-					appVersion: "1",
-					skip:       false,
-				},
+				input:  needsUpdateInput{appVersion: "1", skip: false},
 				output: needsUpdateOutput{err: xerrors.New("fail")},
 			},
 			args:    args{appVersion: "1"},
@@ -116,10 +93,7 @@ func Test_dbWorker_update(t *testing.T) {
 		{
 			name: "Download returns an error",
 			needsUpdate: needsUpdate{
-				input: needsUpdateInput{
-					appVersion: "1",
-					skip:       false,
-				},
+				input:  needsUpdateInput{appVersion: "1", skip: false},
 				output: needsUpdateOutput{needsUpdate: true},
 			},
 			download: download{
@@ -132,52 +106,51 @@ func Test_dbWorker_update(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cacheDir := t.TempDir()
+			cacheDir, err := ioutil.TempDir("", "server-test")
+			require.NoError(t, err, tt.name)
 
 			require.NoError(t, db.Init(cacheDir), tt.name)
 
 			mockDBClient := new(dbFile.MockOperation)
 			mockDBClient.On("NeedsUpdate",
-				tt.needsUpdate.input.appVersion, tt.needsUpdate.input.skip).Return(
+				tt.needsUpdate.input.appVersion, false, tt.needsUpdate.input.skip).Return(
 				tt.needsUpdate.output.needsUpdate, tt.needsUpdate.output.err)
-
-			defer func() { _ = db.Close() }()
+			mockDBClient.On("UpdateMetadata", mock.Anything).Return(nil)
 
 			if tt.download.call {
-				mockDBClient.On("Download", mock.Anything, mock.Anything, mock.Anything).Run(
+				mockDBClient.On("Download", mock.Anything, mock.Anything, false).Run(
 					func(args mock.Arguments) {
 						// fake download: copy testdata/new.db to tmpDir/db/vul.db
+						content, err := ioutil.ReadFile("testdata/new.db")
+						require.NoError(t, err, tt.name)
+
 						tmpDir := args.String(1)
-						err := os.MkdirAll(db.Dir(tmpDir), 0744)
-						require.NoError(t, err)
-
-						_, err = fsutils.CopyFile("testdata/new.db", db.Path(tmpDir))
-						require.NoError(t, err)
-
-						// fake download: copy testdata/metadata.json to tmpDir/db/metadata.json
-						_, err = fsutils.CopyFile("testdata/metadata.json", metadata.Path(tmpDir))
-						require.NoError(t, err)
+						dbPath := db.Path(tmpDir)
+						require.NoError(t, os.MkdirAll(filepath.Dir(dbPath), 0777), tt.name)
+						err = ioutil.WriteFile(dbPath, content, 0444)
+						require.NoError(t, err, tt.name)
 					}).Return(tt.download.err)
 			}
 
 			w := newDBWorker(mockDBClient)
 
 			var dbUpdateWg, requestWg sync.WaitGroup
-			err := w.update(context.Background(), tt.args.appVersion, cacheDir,
-				tt.needsUpdate.input.skip, &dbUpdateWg, &requestWg, ftypes.RegistryOptions{})
+			err = w.update(context.Background(), tt.args.appVersion, cacheDir,
+				&dbUpdateWg, &requestWg)
 			if tt.wantErr != "" {
 				require.NotNil(t, err, tt.name)
 				assert.Contains(t, err.Error(), tt.wantErr, tt.name)
 				return
+			} else {
+				assert.NoError(t, err, tt.name)
 			}
-			require.NoError(t, err, tt.name)
 
 			if !tt.download.call {
 				return
 			}
 
-			mc := metadata.NewClient(cacheDir)
-			got, err := mc.Get()
+			dbc := db.Config{}
+			got, err := dbc.GetMetadata()
 			assert.NoError(t, err, tt.name)
 			assert.Equal(t, tt.want, got, tt.name)
 
@@ -251,10 +224,9 @@ func Test_newServeMux(t *testing.T) {
 
 			c, err := cache.NewFSCache(t.TempDir())
 			require.NoError(t, err)
-			defer func() { _ = c.Close() }()
 
 			ts := httptest.NewServer(newServeMux(
-				c, dbUpdateWg, requestWg, tt.args.token, tt.args.tokenHeader, ""),
+				c, dbUpdateWg, requestWg, tt.args.token, tt.args.tokenHeader),
 			)
 			defer ts.Close()
 
@@ -276,40 +248,4 @@ func Test_newServeMux(t *testing.T) {
 			defer resp.Body.Close()
 		})
 	}
-}
-
-func Test_VersionEndpoint(t *testing.T) {
-	dbUpdateWg, requestWg := &sync.WaitGroup{}, &sync.WaitGroup{}
-	c, err := cache.NewFSCache(t.TempDir())
-	require.NoError(t, err)
-	defer func() { _ = c.Close() }()
-
-	ts := httptest.NewServer(newServeMux(
-		c, dbUpdateWg, requestWg, "", "", "testdata/testcache"),
-	)
-	defer ts.Close()
-
-	resp, err := http.Get(ts.URL + "/version")
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-
-	var versionInfo version.VersionInfo
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&versionInfo))
-
-	expected := version.VersionInfo{
-		Version: "dev",
-		VulnerabilityDB: &metadata.Metadata{
-			Version:      2,
-			NextUpdate:   time.Date(2023, 7, 20, 18, 11, 37, 696263532, time.UTC),
-			UpdatedAt:    time.Date(2023, 7, 20, 12, 11, 37, 696263932, time.UTC),
-			DownloadedAt: time.Date(2023, 7, 25, 7, 1, 41, 239158000, time.UTC),
-		},
-		PolicyBundle: &policy.Metadata{
-			Digest:       "sha256:829832357626da2677955e3b427191212978ba20012b6eaa03229ca28569ae43",
-			DownloadedAt: time.Date(2023, 7, 23, 16, 40, 33, 122462000, time.UTC),
-		},
-	}
-	assert.Equal(t, expected, versionInfo)
 }

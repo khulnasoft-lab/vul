@@ -1,23 +1,23 @@
-name: Scan vulnerabilities
-on:
-  schedule:
-    - cron: '0 0 * * *'
-  workflow_dispatch:
-
+name: Scan
+on: [push, pull_request]
 jobs:
   build:
     name: Scan Go vulnerabilities
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4.1.0
+        uses: actions/checkout@v2
 
-      - name: Run Vul vulnerability scanner and create GitHub issues
-        uses: khulnasoft-lab/vul-issue-action@v0.0.5
+      - name: Run Vul vulnerability scanner to scan for Critical Vulnerabilities
+        uses: khulnasoft-lab/vul-action@master
         with:
-          assignee: khulnasoft-lab
-          severity: CRITICAL
-          skip-dirs: integration,examples,pkg
-          label: kind/security
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          scan-type: 'fs'
+          exit-code: '1'
+          severity: 'CRITICAL'
+
+      - name: Run Vul vulnerability scanner to scan for Medium and High Vulnerabilities
+        uses: khulnasoft-lab/vul-action@master
+        with:
+          scan-type: 'fs'
+          exit-code: '0'
+          severity: 'HIGH,MEDIUM'

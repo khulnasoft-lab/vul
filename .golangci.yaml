@@ -6,10 +6,12 @@ linters-settings:
     check-shadowing: false
   gofmt:
     simplify: false
-  revive:
-    ignore-generated-header: true
+  golint:
+    min-confidence: 0
   gocyclo:
-    min-complexity: 20
+    min-complexity: 10
+  maligned:
+    suggest-new: true
   dupl:
     threshold: 100
   goconst:
@@ -17,82 +19,34 @@ linters-settings:
     min-occurrences: 3
   misspell:
     locale: US
-    ignore-words:
-      - licence
-  gosec:
-    excludes:
-      - G101
-      - G114
-      - G204
-      - G402
-  gci:
-    sections:
-      - standard
-      - default
-      - prefix(github.com/khulnasoft-lab/)
-      - blank
-      - dot
-  gomodguard:
-    blocked:
-      modules:
-        - github.com/hashicorp/go-version:
-            recommendations:
-              - github.com/khulnasoft-lab/goversion
-            reason: "`khulnasoft-lab/goversion` is designed for our use-cases"
-        - github.com/Masterminds/semver:
-            recommendations:
-              - github.com/khulnasoft-lab/goversion
-            reason: "`khulnasoft-lab/goversion` is designed for our use-cases"
-  gocritic:
-    disabled-checks:
-      - appendAssign
-      - unnamedResult
-      - whyNoLint
-      - indexAlloc
-      - octalLiteral
-      - hugeParam
-      - rangeValCopy
-      - regexpSimplify
-      - sloppyReassign
-      - commentedOutCode
-    enabled-tags:
-      - diagnostic
-      - style
-      - performance
-      - experimental
-      - opinionated
-    settings:
-      ruleguard:
-        failOn: all
-        rules: '${configDir}/misc/lint/rules.go'
+  goimports:
+    klocal-prefixes: github.com/khulnasoft-lab
 
 linters:
   disable-all: true
   enable:
-    - unused
+    - structcheck
     - ineffassign
     - typecheck
     - govet
-    - revive
+    - errcheck
+    - varcheck
+    - deadcode
+    - golint
     - gosec
     - unconvert
     - goconst
     - gocyclo
     - gofmt
+    - goimports
+    - maligned
     - misspell
-    - bodyclose
-    - gci
-    - gomodguard
-    - tenv
-    - gocritic
 
 run:
-  go: '1.20'
   skip-files:
-    - ".*_mock.go$"
-    - ".*_test.go$"
+    - ".*._mock.go$"
+    - ".*._test.go$"
     - "integration/*"
-    - "examples/*"
 
 issues:
   exclude-rules:
@@ -102,6 +56,9 @@ issues:
     - linters:
         - gosec
       text: "Deferring unsafe method"
+    - linters:
+        - gosec
+      text: "G204: Subprocess launched with variable"
     - linters:
         - errcheck
       text: "Close` is not checked"

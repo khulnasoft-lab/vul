@@ -1,24 +1,21 @@
 package local
 
 import (
-	"context"
 	"errors"
 	"testing"
-	"time"
 
-	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/aquasecurity/fanal/analyzer"
+	ftypes "github.com/aquasecurity/fanal/types"
+	dtypes "github.com/aquasecurity/go-dep-parser/pkg/types"
 	"github.com/khulnasoft-lab/vul-db/pkg/db"
-	dbTypes "github.com/khulnasoft-lab/vul-db/pkg/types"
+	"github.com/khulnasoft-lab/vul-db/pkg/vulnsrc/vulnerability"
 	"github.com/khulnasoft-lab/vul/pkg/dbtest"
-	"github.com/khulnasoft-lab/vul/pkg/fanal/analyzer"
-	ftypes "github.com/khulnasoft-lab/vul/pkg/fanal/types"
-	"github.com/khulnasoft-lab/vul/pkg/scanner/langpkg"
-	"github.com/khulnasoft-lab/vul/pkg/scanner/ospkg"
+	ospkgDetector "github.com/khulnasoft-lab/vul/pkg/detector/ospkg"
+	"github.com/khulnasoft-lab/vul/pkg/report"
 	"github.com/khulnasoft-lab/vul/pkg/types"
-	"github.com/khulnasoft-lab/vul/pkg/vulnerability"
 )
 
 func TestScanner_Scan(t *testing.T) {
@@ -28,13 +25,15 @@ func TestScanner_Scan(t *testing.T) {
 		options  types.ScanOptions
 	}
 	tests := []struct {
-		name                   string
-		args                   args
-		fixtures               []string
-		applyLayersExpectation ApplierApplyLayersExpectation
-		wantResults            types.Results
-		wantOS                 ftypes.OS
-		wantErr                string
+		name                    string
+		args                    args
+		fixtures                []string
+		applyLayersExpectation  ApplierApplyLayersExpectation
+		ospkgDetectExpectations []OspkgDetectorDetectExpectation
+		wantResults             report.Results
+		wantOS                  *ftypes.OS
+		wantEosl                bool
+		wantErr                 string
 	}{
 		{
 			name: "happy path",
@@ -42,11 +41,8 @@ func TestScanner_Scan(t *testing.T) {
 				target:   "alpine:latest",
 				layerIDs: []string{"sha256:5216338b40a7b96416b8b9858974bbe4acc3096ee60acbc4dfb1ee02aecceb10"},
 				options: types.ScanOptions{
-					VulnType: []string{
-						types.VulnTypeOS,
-						types.VulnTypeLibrary,
-					},
-					Scanners: types.Scanners{types.VulnerabilityScanner},
+					VulnType:       []string{types.VulnTypeOS, types.VulnTypeLibrary},
+					SecurityChecks: []string{types.SecurityCheckVulnerability},
 				},
 			},
 			fixtures: []string{"testdata/fixtures/happy.yaml"},
@@ -56,16 +52,14 @@ func TestScanner_Scan(t *testing.T) {
 				},
 				Returns: ApplierApplyLayersReturns{
 					Detail: ftypes.ArtifactDetail{
-						OS: ftypes.OS{
-							Family: ftypes.Alpine,
+						OS: &ftypes.OS{
+							Family: "alpine",
 							Name:   "3.11",
 						},
 						Packages: []ftypes.Package{
 							{
-								Name:       "musl",
-								Version:    "1.2.3",
-								SrcName:    "musl",
-								SrcVersion: "1.2.3",
+								Name:    "musl",
+								Version: "1.2.3",
 								Layer: ftypes.Layer{
 									DiffID: "sha256:ebf12965380b39889c99a9c02e82ba465f887b45975b6e389d42e9e6a3857888",
 								},
@@ -75,10 +69,9 @@ func TestScanner_Scan(t *testing.T) {
 							{
 								Type:     ftypes.Bundler,
 								FilePath: "/app/Gemfile.lock",
-								Libraries: []ftypes.Package{
+								Libraries: []ftypes.LibraryInfo{
 									{
-										Name:    "rails",
-										Version: "4.0.2",
+										Library: dtypes.Library{Name: "rails", Version: "4.0.2"},
 										Layer: ftypes.Layer{
 											DiffID: "sha256:0ea33a93585cf1917ba522b2304634c3073654062d5282c1346322967790ef33",
 										},
@@ -89,63 +82,72 @@ func TestScanner_Scan(t *testing.T) {
 					},
 				},
 			},
-			wantResults: types.Results{
+			ospkgDetectExpectations: []OspkgDetectorDetectExpectation{
+				{
+					Args: OspkgDetectorDetectArgs{
+						OsFamily: "alpine",
+						OsName:   "3.11",
+						Pkgs: []ftypes.Package{
+							{
+								Name:    "musl",
+								Version: "1.2.3",
+								Layer: ftypes.Layer{
+									DiffID: "sha256:ebf12965380b39889c99a9c02e82ba465f887b45975b6e389d42e9e6a3857888",
+								},
+							},
+						},
+					},
+					Returns: OspkgDetectorDetectReturns{
+						DetectedVulns: []types.DetectedVulnerability{
+							{
+								VulnerabilityID:  "CVE-2020-9999",
+								PkgName:          "musl",
+								InstalledVersion: "1.2.3",
+								FixedVersion:     "1.2.4",
+								Layer: ftypes.Layer{
+									DiffID: "sha256:ebf12965380b39889c99a9c02e82ba465f887b45975b6e389d42e9e6a3857888",
+								},
+							},
+						},
+						Eosl: false,
+					},
+				},
+			},
+			wantResults: report.Results{
 				{
 					Target: "alpine:latest (alpine 3.11)",
-					Class:  types.ClassOSPkg,
-					Type:   ftypes.Alpine,
 					Vulnerabilities: []types.DetectedVulnerability{
 						{
 							VulnerabilityID:  "CVE-2020-9999",
 							PkgName:          "musl",
 							InstalledVersion: "1.2.3",
 							FixedVersion:     "1.2.4",
-							Status:           dbTypes.StatusFixed,
 							Layer: ftypes.Layer{
 								DiffID: "sha256:ebf12965380b39889c99a9c02e82ba465f887b45975b6e389d42e9e6a3857888",
 							},
-							PrimaryURL: "https://avd.khulnasoft.com/nvd/cve-2020-9999",
-							Vulnerability: dbTypes.Vulnerability{
-								Title:       "dos",
-								Description: "dos vulnerability",
-								Severity:    "HIGH",
-							},
 						},
 					},
+					Type: vulnerability.Alpine,
 				},
 				{
 					Target: "/app/Gemfile.lock",
-					Class:  types.ClassLangPkg,
-					Type:   ftypes.Bundler,
 					Vulnerabilities: []types.DetectedVulnerability{
 						{
 							VulnerabilityID:  "CVE-2014-0081",
 							PkgName:          "rails",
 							InstalledVersion: "4.0.2",
 							FixedVersion:     "4.0.3, 3.2.17",
-							Status:           dbTypes.StatusFixed,
 							Layer: ftypes.Layer{
 								DiffID: "sha256:0ea33a93585cf1917ba522b2304634c3073654062d5282c1346322967790ef33",
 							},
-							PrimaryURL: "https://avd.khulnasoft.com/nvd/cve-2014-0081",
-							Vulnerability: dbTypes.Vulnerability{
-								Title:       "xss",
-								Description: "xss vulnerability",
-								Severity:    "MEDIUM",
-								References: []string{
-									"http://example.com",
-								},
-								LastModifiedDate: lo.ToPtr(time.Date(2020, 2, 1, 1, 1, 0, 0, time.UTC)),
-								PublishedDate:    lo.ToPtr(time.Date(2020, 1, 1, 1, 1, 0, 0, time.UTC)),
-							},
 						},
 					},
+					Type: "bundler",
 				},
 			},
-			wantOS: ftypes.OS{
+			wantOS: &ftypes.OS{
 				Family: "alpine",
 				Name:   "3.11",
-				Eosl:   true,
 			},
 		},
 		{
@@ -154,11 +156,8 @@ func TestScanner_Scan(t *testing.T) {
 				target:   "alpine:latest",
 				layerIDs: []string{"sha256:5216338b40a7b96416b8b9858974bbe4acc3096ee60acbc4dfb1ee02aecceb10"},
 				options: types.ScanOptions{
-					VulnType: []string{
-						types.VulnTypeOS,
-						types.VulnTypeLibrary,
-					},
-					Scanners:        types.Scanners{types.VulnerabilityScanner},
+					VulnType:        []string{types.VulnTypeOS, types.VulnTypeLibrary},
+					SecurityChecks:  []string{types.SecurityCheckVulnerability},
 					ListAllPackages: true,
 				},
 			},
@@ -169,25 +168,21 @@ func TestScanner_Scan(t *testing.T) {
 				},
 				Returns: ApplierApplyLayersReturns{
 					Detail: ftypes.ArtifactDetail{
-						OS: ftypes.OS{
+						OS: &ftypes.OS{
 							Family: "alpine",
 							Name:   "3.11",
 						},
 						Packages: []ftypes.Package{
 							{
-								Name:       "musl",
-								Version:    "1.2.3",
-								SrcName:    "musl",
-								SrcVersion: "1.2.3",
+								Name:    "musl",
+								Version: "1.2.3",
 								Layer: ftypes.Layer{
 									DiffID: "sha256:ebf12965380b39889c99a9c02e82ba465f887b45975b6e389d42e9e6a3857888",
 								},
 							},
 							{
-								Name:       "ausl",
-								Version:    "1.2.3",
-								SrcName:    "ausl",
-								SrcVersion: "1.2.3",
+								Name:    "ausl",
+								Version: "1.2.3",
 								Layer: ftypes.Layer{
 									DiffID: "sha256:bbf12965380b39889c99a9c02e82ba465f887b45975b6e389d42e9e6a3857888",
 								},
@@ -197,10 +192,9 @@ func TestScanner_Scan(t *testing.T) {
 							{
 								Type:     "bundler",
 								FilePath: "/app/Gemfile.lock",
-								Libraries: []ftypes.Package{
+								Libraries: []ftypes.LibraryInfo{
 									{
-										Name:    "rails",
-										Version: "4.0.2",
+										Library: dtypes.Library{Name: "rails", Version: "4.0.2"},
 										Layer: ftypes.Layer{
 											DiffID: "sha256:0ea33a93585cf1917ba522b2304634c3073654062d5282c1346322967790ef33",
 										},
@@ -211,55 +205,78 @@ func TestScanner_Scan(t *testing.T) {
 					},
 				},
 			},
-			wantResults: types.Results{
+			ospkgDetectExpectations: []OspkgDetectorDetectExpectation{
+				{
+					Args: OspkgDetectorDetectArgs{
+						OsFamily: "alpine",
+						OsName:   "3.11",
+						Pkgs: []ftypes.Package{
+							{
+								Name:    "musl",
+								Version: "1.2.3",
+								Layer: ftypes.Layer{
+									DiffID: "sha256:ebf12965380b39889c99a9c02e82ba465f887b45975b6e389d42e9e6a3857888",
+								},
+							},
+							{
+								Name:    "ausl",
+								Version: "1.2.3",
+								Layer: ftypes.Layer{
+									DiffID: "sha256:bbf12965380b39889c99a9c02e82ba465f887b45975b6e389d42e9e6a3857888",
+								},
+							},
+						},
+					},
+					Returns: OspkgDetectorDetectReturns{
+						DetectedVulns: []types.DetectedVulnerability{
+							{
+								VulnerabilityID:  "CVE-2020-9999",
+								PkgName:          "musl",
+								InstalledVersion: "1.2.3",
+								FixedVersion:     "1.2.4",
+								Layer: ftypes.Layer{
+									DiffID: "sha256:ebf12965380b39889c99a9c02e82ba465f887b45975b6e389d42e9e6a3857888",
+								},
+							},
+						},
+						Eosl: false,
+					},
+				},
+			},
+			wantResults: report.Results{
 				{
 					Target: "alpine:latest (alpine 3.11)",
-					Class:  types.ClassOSPkg,
-					Type:   ftypes.Alpine,
 					Packages: []ftypes.Package{
 						{
-							Name:       "ausl",
-							Version:    "1.2.3",
-							SrcName:    "ausl",
-							SrcVersion: "1.2.3",
+							Name:    "ausl",
+							Version: "1.2.3",
 							Layer: ftypes.Layer{
 								DiffID: "sha256:bbf12965380b39889c99a9c02e82ba465f887b45975b6e389d42e9e6a3857888",
 							},
 						},
 						{
-							Name:       "musl",
-							Version:    "1.2.3",
-							SrcName:    "musl",
-							SrcVersion: "1.2.3",
+							Name:    "musl",
+							Version: "1.2.3",
 							Layer: ftypes.Layer{
 								DiffID: "sha256:ebf12965380b39889c99a9c02e82ba465f887b45975b6e389d42e9e6a3857888",
 							},
 						},
 					},
-					// For backward compatibility, will be removed
 					Vulnerabilities: []types.DetectedVulnerability{
 						{
 							VulnerabilityID:  "CVE-2020-9999",
 							PkgName:          "musl",
 							InstalledVersion: "1.2.3",
 							FixedVersion:     "1.2.4",
-							Status:           dbTypes.StatusFixed,
 							Layer: ftypes.Layer{
 								DiffID: "sha256:ebf12965380b39889c99a9c02e82ba465f887b45975b6e389d42e9e6a3857888",
 							},
-							PrimaryURL: "https://avd.khulnasoft.com/nvd/cve-2020-9999",
-							Vulnerability: dbTypes.Vulnerability{
-								Title:       "dos",
-								Description: "dos vulnerability",
-								Severity:    "HIGH",
-							},
 						},
 					},
+					Type: vulnerability.Alpine,
 				},
 				{
 					Target: "/app/Gemfile.lock",
-					Class:  types.ClassLangPkg,
-					Type:   ftypes.Bundler,
 					Packages: []ftypes.Package{
 						{
 							Name:    "rails",
@@ -269,145 +286,23 @@ func TestScanner_Scan(t *testing.T) {
 							},
 						},
 					},
-					// For backward compatibility, will be removed
 					Vulnerabilities: []types.DetectedVulnerability{
 						{
 							VulnerabilityID:  "CVE-2014-0081",
 							PkgName:          "rails",
 							InstalledVersion: "4.0.2",
 							FixedVersion:     "4.0.3, 3.2.17",
-							Status:           dbTypes.StatusFixed,
-							Layer: ftypes.Layer{
-								DiffID: "sha256:0ea33a93585cf1917ba522b2304634c3073654062d5282c1346322967790ef33",
-							},
-							PrimaryURL: "https://avd.khulnasoft.com/nvd/cve-2014-0081",
-							Vulnerability: dbTypes.Vulnerability{
-								Title:       "xss",
-								Description: "xss vulnerability",
-								Severity:    "MEDIUM",
-								References: []string{
-									"http://example.com",
-								},
-								LastModifiedDate: lo.ToPtr(time.Date(2020, 2, 1, 1, 1, 0, 0, time.UTC)),
-								PublishedDate:    lo.ToPtr(time.Date(2020, 1, 1, 1, 1, 0, 0, time.UTC)),
-							},
-						},
-					},
-				},
-			},
-			wantOS: ftypes.OS{
-				Family: "alpine",
-				Name:   "3.11",
-				Eosl:   true,
-			},
-		},
-		{
-			name: "happy path with list all packages and without vulnerabilities",
-			args: args{
-				target:   "alpine:latest",
-				layerIDs: []string{"sha256:5216338b40a7b96416b8b9858974bbe4acc3096ee60acbc4dfb1ee02aecceb10"},
-				options: types.ScanOptions{
-					VulnType: []string{
-						types.VulnTypeOS,
-						types.VulnTypeLibrary,
-					},
-					Scanners:        types.Scanners{types.VulnerabilityScanner},
-					ListAllPackages: true,
-				},
-			},
-			applyLayersExpectation: ApplierApplyLayersExpectation{
-				Args: ApplierApplyLayersArgs{
-					BlobIDs: []string{"sha256:5216338b40a7b96416b8b9858974bbe4acc3096ee60acbc4dfb1ee02aecceb10"},
-				},
-				Returns: ApplierApplyLayersReturns{
-					Detail: ftypes.ArtifactDetail{
-						OS: ftypes.OS{
-							Family: "alpine",
-							Name:   "3.11",
-						},
-						Packages: []ftypes.Package{
-							{
-								Name:       "musl",
-								Version:    "1.2.3",
-								SrcName:    "musl",
-								SrcVersion: "1.2.3",
-								Layer: ftypes.Layer{
-									DiffID: "sha256:ebf12965380b39889c99a9c02e82ba465f887b45975b6e389d42e9e6a3857888",
-								},
-							},
-							{
-								Name:       "ausl",
-								Version:    "1.2.3",
-								SrcName:    "ausl",
-								SrcVersion: "1.2.3",
-								Layer: ftypes.Layer{
-									DiffID: "sha256:bbf12965380b39889c99a9c02e82ba465f887b45975b6e389d42e9e6a3857888",
-								},
-							},
-						},
-						Applications: []ftypes.Application{
-							{
-								Type:     "bundler",
-								FilePath: "/app/Gemfile.lock",
-								Libraries: []ftypes.Package{
-									{
-										Name:    "rails",
-										Version: "4.0.2",
-										Layer: ftypes.Layer{
-											DiffID: "sha256:0ea33a93585cf1917ba522b2304634c3073654062d5282c1346322967790ef33",
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			wantResults: types.Results{
-				{
-					Target: "alpine:latest (alpine 3.11)",
-					Class:  types.ClassOSPkg,
-					Type:   ftypes.Alpine,
-					Packages: []ftypes.Package{
-						{
-							Name:       "ausl",
-							Version:    "1.2.3",
-							SrcName:    "ausl",
-							SrcVersion: "1.2.3",
-							Layer: ftypes.Layer{
-								DiffID: "sha256:bbf12965380b39889c99a9c02e82ba465f887b45975b6e389d42e9e6a3857888",
-							},
-						},
-						{
-							Name:       "musl",
-							Version:    "1.2.3",
-							SrcName:    "musl",
-							SrcVersion: "1.2.3",
-							Layer: ftypes.Layer{
-								DiffID: "sha256:ebf12965380b39889c99a9c02e82ba465f887b45975b6e389d42e9e6a3857888",
-							},
-						},
-					},
-				},
-				{
-					Target: "/app/Gemfile.lock",
-					Class:  types.ClassLangPkg,
-					Type:   ftypes.Bundler,
-					Packages: []ftypes.Package{
-						{
-							Name:    "rails",
-							Version: "4.0.2",
 							Layer: ftypes.Layer{
 								DiffID: "sha256:0ea33a93585cf1917ba522b2304634c3073654062d5282c1346322967790ef33",
 							},
 						},
 					},
+					Type: "bundler",
 				},
 			},
-			wantOS: ftypes.OS{
+			wantOS: &ftypes.OS{
 				Family: "alpine",
 				Name:   "3.11",
-				Eosl:   true,
 			},
 		},
 		{
@@ -416,11 +311,8 @@ func TestScanner_Scan(t *testing.T) {
 				target:   "alpine:latest",
 				layerIDs: []string{"sha256:5216338b40a7b96416b8b9858974bbe4acc3096ee60acbc4dfb1ee02aecceb10"},
 				options: types.ScanOptions{
-					VulnType: []string{
-						types.VulnTypeOS,
-						types.VulnTypeLibrary,
-					},
-					Scanners: types.Scanners{types.VulnerabilityScanner},
+					VulnType:       []string{types.VulnTypeOS, types.VulnTypeLibrary},
+					SecurityChecks: []string{types.SecurityCheckVulnerability},
 				},
 			},
 			fixtures: []string{"testdata/fixtures/happy.yaml"},
@@ -430,106 +322,17 @@ func TestScanner_Scan(t *testing.T) {
 				},
 				Returns: ApplierApplyLayersReturns{
 					Detail: ftypes.ArtifactDetail{
-						OS: ftypes.OS{},
-						Applications: []ftypes.Application{
-							{
-								Type:     ftypes.Bundler,
-								FilePath: "/app/Gemfile.lock",
-								Libraries: []ftypes.Package{
-									{
-										Name:    "innocent", // no vulnerability
-										Version: "1.2.3",
-										Layer: ftypes.Layer{
-											DiffID: "sha256:9922bc15eeefe1637b803ef2106f178152ce19a391f24aec838cbe2e48e73303",
-										},
-									},
-								},
-							},
-							{
-								Type:     ftypes.Bundler,
-								FilePath: "/app/Gemfile.lock",
-								Libraries: []ftypes.Package{
-									{
-										Name:    "rails", // one vulnerability
-										Version: "4.0.2",
-										Layer: ftypes.Layer{
-											DiffID: "sha256:9922bc15eeefe1637b803ef2106f178152ce19a391f24aec838cbe2e48e73303",
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			wantResults: types.Results{
-				{
-					Target: "/app/Gemfile.lock",
-					Class:  types.ClassLangPkg,
-					Type:   "bundler",
-					Vulnerabilities: []types.DetectedVulnerability{
-						{
-							VulnerabilityID:  "CVE-2014-0081",
-							PkgName:          "rails",
-							InstalledVersion: "4.0.2",
-							FixedVersion:     "4.0.3, 3.2.17",
-							Status:           dbTypes.StatusFixed,
-							Layer: ftypes.Layer{
-								DiffID: "sha256:9922bc15eeefe1637b803ef2106f178152ce19a391f24aec838cbe2e48e73303",
-							},
-							PrimaryURL: "https://avd.khulnasoft.com/nvd/cve-2014-0081",
-							Vulnerability: dbTypes.Vulnerability{
-								Title:       "xss",
-								Description: "xss vulnerability",
-								Severity:    "MEDIUM",
-								References: []string{
-									"http://example.com",
-								},
-								LastModifiedDate: lo.ToPtr(time.Date(2020, 2, 1, 1, 1, 0, 0, time.UTC)),
-								PublishedDate:    lo.ToPtr(time.Date(2020, 1, 1, 1, 1, 0, 0, time.UTC)),
-							},
-						},
-					},
-				},
-			},
-			wantOS: ftypes.OS{},
-		},
-		{
-			name: "happy path. Empty filePaths (e.g. Scanned SBOM)",
-			args: args{
-				target:   "./result.cdx",
-				layerIDs: []string{"sha256:5216338b40a7b96416b8b9858974bbe4acc3096ee60acbc4dfb1ee02aecceb10"},
-				options: types.ScanOptions{
-					VulnType:        []string{types.VulnTypeLibrary},
-					Scanners:        types.Scanners{types.VulnerabilityScanner},
-					ListAllPackages: true,
-				},
-			},
-			fixtures: []string{"testdata/fixtures/happy.yaml"},
-			applyLayersExpectation: ApplierApplyLayersExpectation{
-				Args: ApplierApplyLayersArgs{
-					BlobIDs: []string{"sha256:5216338b40a7b96416b8b9858974bbe4acc3096ee60acbc4dfb1ee02aecceb10"},
-				},
-				Returns: ApplierApplyLayersReturns{
-					Detail: ftypes.ArtifactDetail{
+						OS: &ftypes.OS{},
 						Applications: []ftypes.Application{
 							{
 								Type:     "bundler",
-								FilePath: "",
-								Libraries: []ftypes.Package{
+								FilePath: "/app/Gemfile.lock",
+								Libraries: []ftypes.LibraryInfo{
 									{
-										Name:    "rails",
-										Version: "4.0.2",
-									},
-								},
-							},
-							{
-								Type:     "composer",
-								FilePath: "",
-								Libraries: []ftypes.Package{
-									{
-										Name:    "laravel/framework",
-										Version: "6.0.0",
+										Library: dtypes.Library{Name: "rails", Version: "4.0.2"},
+										Layer: ftypes.Layer{
+											DiffID: "sha256:9922bc15eeefe1637b803ef2106f178152ce19a391f24aec838cbe2e48e73303",
+										},
 									},
 								},
 							},
@@ -537,59 +340,24 @@ func TestScanner_Scan(t *testing.T) {
 					},
 				},
 			},
-			wantResults: types.Results{
+			wantResults: report.Results{
 				{
-					Target: "",
-					Class:  types.ClassLangPkg,
-					Type:   ftypes.Bundler,
-					Packages: []ftypes.Package{
-						{
-							Name:    "rails",
-							Version: "4.0.2",
-						},
-					},
+					Target: "/app/Gemfile.lock",
 					Vulnerabilities: []types.DetectedVulnerability{
 						{
 							VulnerabilityID:  "CVE-2014-0081",
 							PkgName:          "rails",
 							InstalledVersion: "4.0.2",
 							FixedVersion:     "4.0.3, 3.2.17",
-							Status:           dbTypes.StatusFixed,
-							PrimaryURL:       "https://avd.khulnasoft.com/nvd/cve-2014-0081",
-							Vulnerability: dbTypes.Vulnerability{
-								Title:       "xss",
-								Description: "xss vulnerability",
-								Severity:    "MEDIUM",
-								References: []string{
-									"http://example.com",
-								},
-								LastModifiedDate: lo.ToPtr(time.Date(2020, 2, 1, 1, 1, 0, 0, time.UTC)),
-								PublishedDate:    lo.ToPtr(time.Date(2020, 1, 1, 1, 1, 0, 0, time.UTC)),
+							Layer: ftypes.Layer{
+								DiffID: "sha256:9922bc15eeefe1637b803ef2106f178152ce19a391f24aec838cbe2e48e73303",
 							},
 						},
 					},
-				},
-				{
-					Target: "",
-					Class:  types.ClassLangPkg,
-					Type:   ftypes.Composer,
-					Packages: []ftypes.Package{
-						{
-							Name:    "laravel/framework",
-							Version: "6.0.0",
-						},
-					},
-					Vulnerabilities: []types.DetectedVulnerability{
-						{
-							VulnerabilityID:  "CVE-2021-21263",
-							PkgName:          "laravel/framework",
-							InstalledVersion: "6.0.0",
-							FixedVersion:     "8.22.1, 7.30.3, 6.20.12",
-							Status:           dbTypes.StatusFixed,
-						},
-					},
+					Type: "bundler",
 				},
 			},
+			wantOS: &ftypes.OS{},
 		},
 		{
 			name: "happy path with no package",
@@ -597,11 +365,8 @@ func TestScanner_Scan(t *testing.T) {
 				target:   "alpine:latest",
 				layerIDs: []string{"sha256:5216338b40a7b96416b8b9858974bbe4acc3096ee60acbc4dfb1ee02aecceb10"},
 				options: types.ScanOptions{
-					VulnType: []string{
-						types.VulnTypeOS,
-						types.VulnTypeLibrary,
-					},
-					Scanners: types.Scanners{types.VulnerabilityScanner},
+					VulnType:       []string{types.VulnTypeOS, types.VulnTypeLibrary},
+					SecurityChecks: []string{types.SecurityCheckVulnerability},
 				},
 			},
 			fixtures: []string{"testdata/fixtures/happy.yaml"},
@@ -611,7 +376,7 @@ func TestScanner_Scan(t *testing.T) {
 				},
 				Returns: ApplierApplyLayersReturns{
 					Detail: ftypes.ArtifactDetail{
-						OS: ftypes.OS{
+						OS: &ftypes.OS{
 							Family: "alpine",
 							Name:   "3.11",
 						},
@@ -619,10 +384,9 @@ func TestScanner_Scan(t *testing.T) {
 							{
 								Type:     "bundler",
 								FilePath: "/app/Gemfile.lock",
-								Libraries: []ftypes.Package{
+								Libraries: []ftypes.LibraryInfo{
 									{
-										Name:    "rails",
-										Version: "4.0.2",
+										Library: dtypes.Library{Name: "rails", Version: "4.0.2"},
 										Layer: ftypes.Layer{
 											DiffID: "sha256:0ea33a93585cf1917ba522b2304634c3073654062d5282c1346322967790ef33",
 										},
@@ -634,45 +398,41 @@ func TestScanner_Scan(t *testing.T) {
 					Err: analyzer.ErrNoPkgsDetected,
 				},
 			},
-			wantResults: types.Results{
+			ospkgDetectExpectations: []OspkgDetectorDetectExpectation{
+				{
+					Args: OspkgDetectorDetectArgs{
+						OsFamily: "alpine",
+						OsName:   "3.11",
+					},
+					Returns: OspkgDetectorDetectReturns{
+						Eosl: false,
+					},
+				},
+			},
+			wantResults: report.Results{
 				{
 					Target: "alpine:latest (alpine 3.11)",
-					Class:  types.ClassOSPkg,
-					Type:   ftypes.Alpine,
+					Type:   vulnerability.Alpine,
 				},
 				{
 					Target: "/app/Gemfile.lock",
-					Class:  types.ClassLangPkg,
-					Type:   ftypes.Bundler,
 					Vulnerabilities: []types.DetectedVulnerability{
 						{
 							VulnerabilityID:  "CVE-2014-0081",
 							PkgName:          "rails",
 							InstalledVersion: "4.0.2",
 							FixedVersion:     "4.0.3, 3.2.17",
-							Status:           dbTypes.StatusFixed,
 							Layer: ftypes.Layer{
 								DiffID: "sha256:0ea33a93585cf1917ba522b2304634c3073654062d5282c1346322967790ef33",
 							},
-							PrimaryURL: "https://avd.khulnasoft.com/nvd/cve-2014-0081",
-							Vulnerability: dbTypes.Vulnerability{
-								Title:       "xss",
-								Description: "xss vulnerability",
-								Severity:    "MEDIUM",
-								References: []string{
-									"http://example.com",
-								},
-								LastModifiedDate: lo.ToPtr(time.Date(2020, 2, 1, 1, 1, 0, 0, time.UTC)),
-								PublishedDate:    lo.ToPtr(time.Date(2020, 1, 1, 1, 1, 0, 0, time.UTC)),
-							},
 						},
 					},
+					Type: "bundler",
 				},
 			},
-			wantOS: ftypes.OS{
+			wantOS: &ftypes.OS{
 				Family: "alpine",
 				Name:   "3.11",
-				Eosl:   true,
 			},
 		},
 		{
@@ -681,11 +441,8 @@ func TestScanner_Scan(t *testing.T) {
 				target:   "fedora:27",
 				layerIDs: []string{"sha256:5216338b40a7b96416b8b9858974bbe4acc3096ee60acbc4dfb1ee02aecceb10"},
 				options: types.ScanOptions{
-					VulnType: []string{
-						types.VulnTypeOS,
-						types.VulnTypeLibrary,
-					},
-					Scanners: types.Scanners{types.VulnerabilityScanner},
+					VulnType:       []string{types.VulnTypeOS, types.VulnTypeLibrary},
+					SecurityChecks: []string{types.SecurityCheckVulnerability},
 				},
 			},
 			fixtures: []string{"testdata/fixtures/happy.yaml"},
@@ -695,7 +452,7 @@ func TestScanner_Scan(t *testing.T) {
 				},
 				Returns: ApplierApplyLayersReturns{
 					Detail: ftypes.ArtifactDetail{
-						OS: ftypes.OS{
+						OS: &ftypes.OS{
 							Family: "fedora",
 							Name:   "27",
 						},
@@ -703,10 +460,9 @@ func TestScanner_Scan(t *testing.T) {
 							{
 								Type:     "bundler",
 								FilePath: "/app/Gemfile.lock",
-								Libraries: []ftypes.Package{
+								Libraries: []ftypes.LibraryInfo{
 									{
-										Name:    "rails",
-										Version: "4.0.2",
+										Library: dtypes.Library{Name: "rails", Version: "4.0.2"},
 										Layer: ftypes.Layer{
 											DiffID: "sha256:9922bc15eeefe1637b803ef2106f178152ce19a391f24aec838cbe2e48e73303",
 										},
@@ -717,37 +473,35 @@ func TestScanner_Scan(t *testing.T) {
 					},
 				},
 			},
-			wantResults: types.Results{
+			ospkgDetectExpectations: []OspkgDetectorDetectExpectation{
+				{
+					Args: OspkgDetectorDetectArgs{
+						OsFamily: "fedora",
+						OsName:   "27",
+					},
+					Returns: OspkgDetectorDetectReturns{
+						Err: ospkgDetector.ErrUnsupportedOS,
+					},
+				},
+			},
+			wantResults: report.Results{
 				{
 					Target: "/app/Gemfile.lock",
-					Class:  types.ClassLangPkg,
-					Type:   ftypes.Bundler,
 					Vulnerabilities: []types.DetectedVulnerability{
 						{
 							VulnerabilityID:  "CVE-2014-0081",
 							PkgName:          "rails",
 							InstalledVersion: "4.0.2",
 							FixedVersion:     "4.0.3, 3.2.17",
-							Status:           dbTypes.StatusFixed,
 							Layer: ftypes.Layer{
 								DiffID: "sha256:9922bc15eeefe1637b803ef2106f178152ce19a391f24aec838cbe2e48e73303",
 							},
-							PrimaryURL: "https://avd.khulnasoft.com/nvd/cve-2014-0081",
-							Vulnerability: dbTypes.Vulnerability{
-								Title:       "xss",
-								Description: "xss vulnerability",
-								Severity:    "MEDIUM",
-								References: []string{
-									"http://example.com",
-								},
-								LastModifiedDate: lo.ToPtr(time.Date(2020, 2, 1, 1, 1, 0, 0, time.UTC)),
-								PublishedDate:    lo.ToPtr(time.Date(2020, 1, 1, 1, 1, 0, 0, time.UTC)),
-							},
 						},
 					},
+					Type: "bundler",
 				},
 			},
-			wantOS: ftypes.OS{
+			wantOS: &ftypes.OS{
 				Family: "fedora",
 				Name:   "27",
 			},
@@ -758,11 +512,8 @@ func TestScanner_Scan(t *testing.T) {
 				target:   "busybox:latest",
 				layerIDs: []string{"sha256:a6d503001157aedc826853f9b67f26d35966221b158bff03849868ae4a821116"},
 				options: types.ScanOptions{
-					VulnType: []string{
-						types.VulnTypeOS,
-						types.VulnTypeLibrary,
-					},
-					Scanners: types.Scanners{types.VulnerabilityScanner},
+					VulnType:       []string{types.VulnTypeOS, types.VulnTypeLibrary},
+					SecurityChecks: []string{types.SecurityCheckVulnerability},
 				},
 			},
 			fixtures: []string{"testdata/fixtures/happy.yaml"},
@@ -771,19 +522,23 @@ func TestScanner_Scan(t *testing.T) {
 					BlobIDs: []string{"sha256:a6d503001157aedc826853f9b67f26d35966221b158bff03849868ae4a821116"},
 				},
 				Returns: ApplierApplyLayersReturns{
+					Detail: ftypes.ArtifactDetail{
+						OS: nil,
+					},
 					Err: analyzer.ErrUnknownOS,
 				},
 			},
 			wantResults: nil,
+			wantOS:      nil,
 		},
 		{
-			name: "happy path with only language-specific package detection",
+			name: "happy path with only library detection",
 			args: args{
 				target:   "alpine:latest",
 				layerIDs: []string{"sha256:5216338b40a7b96416b8b9858974bbe4acc3096ee60acbc4dfb1ee02aecceb10"},
 				options: types.ScanOptions{
-					VulnType: []string{types.VulnTypeLibrary},
-					Scanners: types.Scanners{types.VulnerabilityScanner},
+					VulnType:       []string{types.VulnTypeLibrary},
+					SecurityChecks: []string{types.SecurityCheckVulnerability},
 				},
 			},
 			fixtures: []string{"testdata/fixtures/happy.yaml"},
@@ -793,26 +548,20 @@ func TestScanner_Scan(t *testing.T) {
 				},
 				Returns: ApplierApplyLayersReturns{
 					Detail: ftypes.ArtifactDetail{
-						OS: ftypes.OS{
+						OS: &ftypes.OS{
 							Family: "alpine",
 							Name:   "3.11",
 						},
 						Packages: []ftypes.Package{
-							{
-								Name:       "musl",
-								Version:    "1.2.3",
-								SrcName:    "musl",
-								SrcVersion: "1.2.3",
-							},
+							{Name: "musl", Version: "1.2.3"},
 						},
 						Applications: []ftypes.Application{
 							{
 								Type:     "bundler",
 								FilePath: "/app/Gemfile.lock",
-								Libraries: []ftypes.Package{
+								Libraries: []ftypes.LibraryInfo{
 									{
-										Name:    "rails",
-										Version: "4.0.2",
+										Library: dtypes.Library{Name: "rails", Version: "4.0.2"},
 										Layer: ftypes.Layer{
 											DiffID: "sha256:5cb2a5009179b1e78ecfef81a19756328bb266456cf9a9dbbcf9af8b83b735f0",
 										},
@@ -822,10 +571,9 @@ func TestScanner_Scan(t *testing.T) {
 							{
 								Type:     "composer",
 								FilePath: "/app/composer-lock.json",
-								Libraries: []ftypes.Package{
+								Libraries: []ftypes.LibraryInfo{
 									{
-										Name:    "laravel/framework",
-										Version: "6.0.0",
+										Library: dtypes.Library{Name: "laravel/framework", Version: "6.0.0"},
 										Layer: ftypes.Layer{
 											DiffID: "sha256:9922bc15eeefe1637b803ef2106f178152ce19a391f24aec838cbe2e48e73303",
 										},
@@ -836,65 +584,52 @@ func TestScanner_Scan(t *testing.T) {
 					},
 				},
 			},
-			wantResults: types.Results{
+			wantResults: report.Results{
 				{
 					Target: "/app/Gemfile.lock",
-					Class:  types.ClassLangPkg,
-					Type:   ftypes.Bundler,
 					Vulnerabilities: []types.DetectedVulnerability{
 						{
 							VulnerabilityID:  "CVE-2014-0081",
 							PkgName:          "rails",
 							InstalledVersion: "4.0.2",
 							FixedVersion:     "4.0.3, 3.2.17",
-							Status:           dbTypes.StatusFixed,
 							Layer: ftypes.Layer{
 								DiffID: "sha256:5cb2a5009179b1e78ecfef81a19756328bb266456cf9a9dbbcf9af8b83b735f0",
 							},
-							PrimaryURL: "https://avd.khulnasoft.com/nvd/cve-2014-0081",
-							Vulnerability: dbTypes.Vulnerability{
-								Title:       "xss",
-								Description: "xss vulnerability",
-								Severity:    "MEDIUM",
-								References: []string{
-									"http://example.com",
-								},
-								LastModifiedDate: lo.ToPtr(time.Date(2020, 2, 1, 1, 1, 0, 0, time.UTC)),
-								PublishedDate:    lo.ToPtr(time.Date(2020, 1, 1, 1, 1, 0, 0, time.UTC)),
-							},
 						},
 					},
+					Type: "bundler",
 				},
 				{
 					Target: "/app/composer-lock.json",
-					Class:  types.ClassLangPkg,
-					Type:   ftypes.Composer,
 					Vulnerabilities: []types.DetectedVulnerability{
 						{
 							VulnerabilityID:  "CVE-2021-21263",
 							PkgName:          "laravel/framework",
 							InstalledVersion: "6.0.0",
 							FixedVersion:     "8.22.1, 7.30.3, 6.20.12",
-							Status:           dbTypes.StatusFixed,
 							Layer: ftypes.Layer{
 								DiffID: "sha256:9922bc15eeefe1637b803ef2106f178152ce19a391f24aec838cbe2e48e73303",
 							},
 						},
 					},
+					Type: "composer",
 				},
 			},
-			wantOS: ftypes.OS{
+			wantOS: &ftypes.OS{
 				Family: "alpine",
 				Name:   "3.11",
 			},
 		},
 		{
-			name: "happy path with misconfigurations",
+			name: "happy path with skip directories",
 			args: args{
-				target:   "/app/configs",
+				target:   "alpine:latest",
 				layerIDs: []string{"sha256:5216338b40a7b96416b8b9858974bbe4acc3096ee60acbc4dfb1ee02aecceb10"},
 				options: types.ScanOptions{
-					Scanners: types.Scanners{types.MisconfigScanner},
+					VulnType:       []string{types.VulnTypeLibrary},
+					SecurityChecks: []string{types.SecurityCheckVulnerability},
+					SkipDirs:       []string{"/usr/lib/ruby/gems", "/app/k8s"},
 				},
 			},
 			fixtures: []string{"testdata/fixtures/happy.yaml"},
@@ -904,137 +639,62 @@ func TestScanner_Scan(t *testing.T) {
 				},
 				Returns: ApplierApplyLayersReturns{
 					Detail: ftypes.ArtifactDetail{
-						Misconfigurations: []ftypes.Misconfiguration{
+						OS: &ftypes.OS{
+							Family: "alpine",
+							Name:   "3.11",
+						},
+						Packages: []ftypes.Package{
+							{Name: "musl", Version: "1.2.3"},
+						},
+						Applications: []ftypes.Application{
 							{
-								FileType: ftypes.Kubernetes,
-								FilePath: "/app/configs/pod.yaml",
-								Warnings: []ftypes.MisconfResult{
+								Type:     "bundler",
+								FilePath: "usr/lib/ruby/gems/2.5.0/gems/http_parser.rb-0.6.0/Gemfile.lock",
+								Libraries: []ftypes.LibraryInfo{
 									{
-										Namespace: "main.kubernetes.id300",
-										PolicyMetadata: ftypes.PolicyMetadata{
-											ID:       "ID300",
-											Type:     "Kubernetes Security Check",
-											Title:    "Bad Deployment",
-											Severity: "DUMMY",
+										Library: dtypes.Library{Name: "rails", Version: "5.1"},
+										Layer: ftypes.Layer{
+											DiffID: "sha256:5cb2a5009179b1e78ecfef81a19756328bb266456cf9a9dbbcf9af8b83b735f0",
 										},
 									},
-								},
-								Exceptions: ftypes.MisconfResults{
-									{
-										Namespace: "main.kubernetes.id100",
-										PolicyMetadata: ftypes.PolicyMetadata{
-											ID:       "ID100",
-											Type:     "Kubernetes Security Check",
-											Title:    "Bad Deployment",
-											Severity: "HIGH",
-										},
-									},
-								},
-								Layer: ftypes.Layer{
-									DiffID: "sha256:9922bc15eeefe1637b803ef2106f178152ce19a391f24aec838cbe2e48e73303",
 								},
 							},
 							{
-								FileType: ftypes.Kubernetes,
-								FilePath: "/app/configs/deployment.yaml",
-								Successes: []ftypes.MisconfResult{
+								Type:     "composer",
+								FilePath: "app/composer-lock.json",
+								Libraries: []ftypes.LibraryInfo{
 									{
-										Namespace: "builtin.kubernetes.id200",
-										PolicyMetadata: ftypes.PolicyMetadata{
-											ID:       "ID200",
-											Type:     "Kubernetes Security Check",
-											Title:    "Bad Deployment",
-											Severity: "MEDIUM",
+										Library: dtypes.Library{Name: "laravel/framework", Version: "6.0.0"},
+										Layer: ftypes.Layer{
+											DiffID: "sha256:9922bc15eeefe1637b803ef2106f178152ce19a391f24aec838cbe2e48e73303",
 										},
 									},
-								},
-								Failures: ftypes.MisconfResults{
-									{
-										Namespace: "main.kubernetes.id100",
-										Message:   "something bad",
-										PolicyMetadata: ftypes.PolicyMetadata{
-											ID:       "ID100",
-											Type:     "Kubernetes Security Check",
-											Title:    "Bad Deployment",
-											Severity: "HIGH",
-										},
-									},
-								},
-								Layer: ftypes.Layer{
-									DiffID: "sha256:9922bc15eeefe1637b803ef2106f178152ce19a391f24aec838cbe2e48e73303",
 								},
 							},
 						},
 					},
 				},
 			},
-			wantResults: types.Results{
+			wantResults: report.Results{
 				{
-					Target: "/app/configs/deployment.yaml",
-					Class:  types.ClassConfig,
-					Type:   ftypes.Kubernetes,
-					Misconfigurations: []types.DetectedMisconfiguration{
+					Target: "app/composer-lock.json",
+					Vulnerabilities: []types.DetectedVulnerability{
 						{
-							Type:      "Kubernetes Security Check",
-							ID:        "ID100",
-							Title:     "Bad Deployment",
-							Message:   "something bad",
-							Namespace: "main.kubernetes.id100",
-							Severity:  "HIGH",
-							Status:    types.StatusFailure,
-							Layer: ftypes.Layer{
-								DiffID: "sha256:9922bc15eeefe1637b803ef2106f178152ce19a391f24aec838cbe2e48e73303",
-							},
-						},
-						{
-							Type:       "Kubernetes Security Check",
-							ID:         "ID200",
-							Title:      "Bad Deployment",
-							Message:    "No issues found",
-							Namespace:  "builtin.kubernetes.id200",
-							Severity:   "MEDIUM",
-							PrimaryURL: "https://avd.khulnasoft.com/misconfig/id200",
-							References: []string{
-								"https://avd.khulnasoft.com/misconfig/id200",
-							},
-							Status: types.StatusPassed,
+							VulnerabilityID:  "CVE-2021-21263",
+							PkgName:          "laravel/framework",
+							InstalledVersion: "6.0.0",
+							FixedVersion:     "8.22.1, 7.30.3, 6.20.12",
 							Layer: ftypes.Layer{
 								DiffID: "sha256:9922bc15eeefe1637b803ef2106f178152ce19a391f24aec838cbe2e48e73303",
 							},
 						},
 					},
+					Type: "composer",
 				},
-				{
-					Target: "/app/configs/pod.yaml",
-					Class:  types.ClassConfig,
-					Type:   ftypes.Kubernetes,
-					Misconfigurations: []types.DetectedMisconfiguration{
-						{
-							Type:      "Kubernetes Security Check",
-							ID:        "ID300",
-							Title:     "Bad Deployment",
-							Message:   "No issues found",
-							Namespace: "main.kubernetes.id300",
-							Severity:  "MEDIUM",
-							Status:    types.StatusFailure,
-							Layer: ftypes.Layer{
-								DiffID: "sha256:9922bc15eeefe1637b803ef2106f178152ce19a391f24aec838cbe2e48e73303",
-							},
-						},
-						{
-							Type:      "Kubernetes Security Check",
-							ID:        "ID100",
-							Title:     "Bad Deployment",
-							Message:   "No issues found",
-							Namespace: "main.kubernetes.id100",
-							Severity:  "HIGH",
-							Status:    types.StatusException,
-							Layer: ftypes.Layer{
-								DiffID: "sha256:9922bc15eeefe1637b803ef2106f178152ce19a391f24aec838cbe2e48e73303",
-							},
-						},
-					},
-				},
+			},
+			wantOS: &ftypes.OS{
+				Family: "alpine",
+				Name:   "3.11",
 			},
 		},
 		{
@@ -1043,11 +703,8 @@ func TestScanner_Scan(t *testing.T) {
 				target:   "alpine:latest",
 				layerIDs: []string{"sha256:5216338b40a7b96416b8b9858974bbe4acc3096ee60acbc4dfb1ee02aecceb10"},
 				options: types.ScanOptions{
-					VulnType: []string{
-						types.VulnTypeOS,
-						types.VulnTypeLibrary,
-					},
-					Scanners: types.Scanners{types.VulnerabilityScanner},
+					VulnType:       []string{types.VulnTypeOS, types.VulnTypeLibrary},
+					SecurityChecks: []string{types.SecurityCheckVulnerability},
 				},
 			},
 			fixtures: []string{"testdata/fixtures/happy.yaml"},
@@ -1062,13 +719,68 @@ func TestScanner_Scan(t *testing.T) {
 			wantErr: "failed to apply layers",
 		},
 		{
+			name: "sad path: ospkgDetector.Detect returns an error",
+			args: args{
+				target:   "alpine:latest",
+				layerIDs: []string{"sha256:5216338b40a7b96416b8b9858974bbe4acc3096ee60acbc4dfb1ee02aecceb10"},
+				options: types.ScanOptions{
+					VulnType:       []string{types.VulnTypeOS, types.VulnTypeLibrary},
+					SecurityChecks: []string{types.SecurityCheckVulnerability},
+				},
+			},
+			fixtures: []string{"testdata/fixtures/happy.yaml"},
+			applyLayersExpectation: ApplierApplyLayersExpectation{
+				Args: ApplierApplyLayersArgs{
+					BlobIDs: []string{"sha256:5216338b40a7b96416b8b9858974bbe4acc3096ee60acbc4dfb1ee02aecceb10"},
+				},
+				Returns: ApplierApplyLayersReturns{
+					Detail: ftypes.ArtifactDetail{
+						OS: &ftypes.OS{
+							Family: "alpine",
+							Name:   "3.11",
+						},
+						Packages: []ftypes.Package{
+							{
+								Name:    "musl",
+								Version: "1.2.3",
+								Layer: ftypes.Layer{
+									DiffID: "sha256:ebf12965380b39889c99a9c02e82ba465f887b45975b6e389d42e9e6a3857888",
+								},
+							},
+						},
+					},
+				},
+			},
+			ospkgDetectExpectations: []OspkgDetectorDetectExpectation{
+				{
+					Args: OspkgDetectorDetectArgs{
+						OsFamily: "alpine",
+						OsName:   "3.11",
+						Pkgs: []ftypes.Package{
+							{
+								Name:    "musl",
+								Version: "1.2.3",
+								Layer: ftypes.Layer{
+									DiffID: "sha256:ebf12965380b39889c99a9c02e82ba465f887b45975b6e389d42e9e6a3857888",
+								},
+							},
+						},
+					},
+					Returns: OspkgDetectorDetectReturns{
+						Err: errors.New("error"),
+					},
+				},
+			},
+			wantErr: "failed to scan OS packages",
+		},
+		{
 			name: "sad path: library.Detect returns an error",
 			args: args{
 				target:   "alpine:latest",
 				layerIDs: []string{"sha256:5216338b40a7b96416b8b9858974bbe4acc3096ee60acbc4dfb1ee02aecceb10"},
 				options: types.ScanOptions{
-					VulnType: []string{types.VulnTypeLibrary},
-					Scanners: types.Scanners{types.VulnerabilityScanner},
+					VulnType:       []string{types.VulnTypeLibrary},
+					SecurityChecks: []string{types.SecurityCheckVulnerability},
 				},
 			},
 			fixtures: []string{"testdata/fixtures/sad.yaml"},
@@ -1078,7 +790,7 @@ func TestScanner_Scan(t *testing.T) {
 				},
 				Returns: ApplierApplyLayersReturns{
 					Detail: ftypes.ArtifactDetail{
-						OS: ftypes.OS{
+						OS: &ftypes.OS{
 							Family: "alpine",
 							Name:   "3.11",
 						},
@@ -1095,10 +807,9 @@ func TestScanner_Scan(t *testing.T) {
 							{
 								Type:     "bundler",
 								FilePath: "/app/Gemfile.lock",
-								Libraries: []ftypes.Package{
+								Libraries: []ftypes.LibraryInfo{
 									{
-										Name:    "rails",
-										Version: "6.0",
+										Library: dtypes.Library{Name: "rails", Version: "6.0"},
 										Layer: ftypes.Layer{
 											DiffID: "sha256:9bdb2c849099a99c8ab35f6fd7469c623635e8f4479a0a5a3df61e22bae509f6",
 										},
@@ -1121,19 +832,93 @@ func TestScanner_Scan(t *testing.T) {
 			applier := new(MockApplier)
 			applier.ApplyApplyLayersExpectation(tt.applyLayersExpectation)
 
-			s := NewScanner(applier, ospkg.NewScanner(), langpkg.NewScanner(), vulnerability.NewClient(db.Config{}))
-			gotResults, gotOS, err := s.Scan(context.Background(), tt.args.target, "", tt.args.layerIDs, tt.args.options)
+			ospkgDetector := new(MockOspkgDetector)
+			ospkgDetector.ApplyDetectExpectations(tt.ospkgDetectExpectations)
+
+			s := NewScanner(applier, ospkgDetector)
+			gotResults, gotOS, gotEosl, err := s.Scan(tt.args.target, "", tt.args.layerIDs, tt.args.options)
 			if tt.wantErr != "" {
 				require.NotNil(t, err, tt.name)
 				require.Contains(t, err.Error(), tt.wantErr, tt.name)
 				return
+			} else {
+				require.NoError(t, err, tt.name)
 			}
 
-			require.NoError(t, err, tt.name)
 			assert.Equal(t, tt.wantResults, gotResults)
 			assert.Equal(t, tt.wantOS, gotOS)
+			assert.Equal(t, tt.wantEosl, gotEosl)
 
 			applier.AssertExpectations(t)
+			ospkgDetector.AssertExpectations(t)
+		})
+	}
+}
+
+func Test_skipped(t *testing.T) {
+	type args struct {
+		filePath  string
+		skipFiles []string
+		skipDirs  []string
+	}
+	tests := []struct {
+		name string
+		args args
+		want bool
+	}{
+		{
+			name: "no skip directory",
+			args: args{
+				filePath: "app/Gemfile.lock",
+				skipDirs: []string{},
+			},
+			want: false,
+		},
+		{
+			name: "skip directory with the leading slash",
+			args: args{
+				filePath: "app/Gemfile.lock",
+				skipDirs: []string{"/app"},
+			},
+			want: true,
+		},
+		{
+			name: "skip directory without a slash",
+			args: args{
+				filePath: "usr/lib/ruby/gems/2.5.0/gems/http_parser.rb-0.6.0/Gemfile.lock",
+				skipDirs: []string{"/usr/lib/ruby"},
+			},
+			want: true,
+		},
+		{
+			name: "skip file with the leading slash",
+			args: args{
+				filePath:  "Gemfile.lock",
+				skipFiles: []string{"/Gemfile.lock"},
+			},
+			want: true,
+		},
+		{
+			name: "skip file without a slash",
+			args: args{
+				filePath:  "Gemfile.lock",
+				skipFiles: []string{"Gemfile.lock"},
+			},
+			want: true,
+		},
+		{
+			name: "not skipped",
+			args: args{
+				filePath: "usr/lib/ruby/gems/2.5.0/gems/http_parser.rb-0.6.0/Gemfile.lock",
+				skipDirs: []string{"lib/ruby"},
+			},
+			want: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := skipped(tt.args.filePath, tt.args.skipFiles, tt.args.skipDirs)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }

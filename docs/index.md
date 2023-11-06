@@ -1,140 +1,64 @@
----
-hide:
-- toc
----
-![logo](imgs/logo.png){ align=right }
+# Welcome to {{ config.site_name }} 
 
-# Vul Documentation
+A Simple and Comprehensive Vulnerability Scanner for Containers and other Artifacts, Suitable for CI.
 
-👋 Welcome to Vul Documentation! To help you get around, please notice the different sections at the top global menu:
+# Abstract
+`Vul` (`tri` pronounced like **tri**gger, `vy` pronounced like en**vy**) is a simple and comprehensive vulnerability scanner for containers and other artifacts.
+A software vulnerability is a glitch, flaw, or weakness present in the software or in an Operating System.
+`Vul` detects vulnerabilities of OS packages (Alpine, RHEL, CentOS, etc.) and application dependencies (Bundler, Composer, npm, yarn, etc.).
+`Vul` is easy to use. Just install the binary and you're ready to scan. All you need to do for scanning is to specify a target such as an image name of the container.
 
-- You are currently in the [Getting Started] section where you can find general information and help with first steps.
-- In the [Tutorials] section you can find step-by-step guides that help you accomplish specific tasks.
-- In the [Docs] section you can find the complete reference documentation for all of the different features and settings that Vul has to offer.
-- In the [Ecosystem] section you can find how Vul works together with other tools and applications that you might already use.
-- In the [Contributing] section you can find technical developer documentation and contribution guidelines.
+<img src="imgs/overview.png" width="700">
 
-# About Vul
+Vul can be run in two different modes:
 
-Vul ([pronunciation][pronunciation]) is a comprehensive and versatile security scanner. Vul has *scanners* that look for security issues, and *targets* where it can find those issues.
+- [Standalone](./modes/standalone.md)
+- [Client/Server](./modes/client-server.md)
 
-Targets (what Vul can scan):
+Vul can scan three different artifacts:
 
-- Container Image
-- Filesystem
-- Git Repository (remote)
-- Virtual Machine Image
-- Kubernetes
-- AWS
+- [Container Images](./scanning/image.md)
+- [Filesystem](./scanning/filesystem.md)
+- [Git Repositories](./scanning/git-repository.md)
 
-Scanners (what Vul can find there):
+<img src="imgs/usage.gif" width="700">
+<img src="imgs/usage1.png" width="600">
+<img src="imgs/usage2.png" width="600">
 
-- OS packages and software dependencies in use (SBOM)
-- Known vulnerabilities (CVEs)
-- IaC issues and misconfigurations
-- Sensitive information and secrets
-- Software licenses
+It is considered to be used in CI. Before pushing to a container registry or deploying your application, you can scan your local container image and other artifacts easily.
+See [here](./integrations/index.md) for details.
 
-Vul supports most popular programming languages, operating systems, and platforms. For a complete list, see the [Scanning Coverage] page.
+## Features
 
-To learn more, go to the [Vul homepage][homepage] for feature highlights, or to the [Documentation site][Docs] for detailed information.
+- Detect comprehensive vulnerabilities
+    - OS packages (Alpine, **Red Hat Universal Base Image**, Red Hat Enterprise Linux, CentOS, Oracle Linux, Debian, Ubuntu, Amazon Linux, openSUSE Leap, SUSE Enterprise Linux, Photon OS and Distroless)
+    - **Application dependencies** (Bundler, Composer, Pipenv, Poetry, npm, yarn, Cargo, NuGet, Maven, and Go)
+- Simple
+    - Specify only an image name or artifact name
+    - See [Quick Start](quickstart.md) and [Examples](examples/index.md)
+- Fast
+    - The first scan will finish within 10 seconds (depending on your network). Consequent scans will finish in single seconds.
+    - Unlike other scanners that take long to fetch vulnerability information (~10 minutes) on the first run, and encourage you to maintain a durable vulnerability database, Vul is stateless and requires no maintenance or preparation.
+- Easy installation
+    - `apt-get install`, `yum install` and `brew install` is possible (See [Installation](installation.md))
+    - **No pre-requisites** such as installation of DB, libraries, etc.
+- High accuracy
+    - **Especially Alpine Linux and RHEL/CentOS**
+    - Other OSes are also high
+- DevSecOps
+    - **Suitable for CI** such as Travis CI, CircleCI, Jenkins, GitLab CI, etc.
+    - See [CI Example](integrations/index.md)
+- Support multiple formats
+    - container image
+        - A local image in Docker Engine which is running as a daemon
+        - A local image in Podman (>=2.0) which is exposing a socket
+        - A remote image in Docker Registry such as Docker Hub, ECR, GCR and ACR
+        - A tar archive stored in the `docker save` / `podman save` formatted file
+        - An image directory compliant with [OCI Image Format](https://github.com/opencontainers/image-spec)
+    - local filesystem
+    - remote git repository
 
-## Quick Start
+Please see [LICENSE](https://github.com/khulnasoft-lab/vul/blob/main/LICENSE) for Vul licensing information.
 
-### Get Vul
-
-Vul is available in most common distribution channels. The complete list of installation options is available in the [Installation] page. Here are a few popular examples:
-
-- `brew install vul`
-- `docker run khulnasoft/vul`
-- Download binary from <https://github.com/khulnasoft-lab/vul/releases/latest/>
-- See [Installation] for more
-
-Vul is integrated with many popular platforms and applications. The complete list of integrations is available in the [Ecosystem] page. Here are a few popular options examples:
-
-- [GitHub Actions](https://github.com/khulnasoft-lab/vul-action)
-- [Kubernetes operator](https://github.com/khulnasoft-lab/vul-operator)
-- [VS Code plugin](https://github.com/khulnasoft-lab/vul-vscode-extension)
-- See [Ecosystem] for more
-
-### General usage
-
-```bash
-vul <target> [--scanners <scanner1,scanner2>] <subject>
-```
-
-Examples:
-
-```bash
-vul image python:3.4-alpine
-```
-
-<details>
-<summary>Result</summary>
-
-<figure style="text-align: center">
-  <video width="1000" autoplay muted controls loop>
-    <source src="https://user-images.githubusercontent.com/1161307/171013513-95f18734-233d-45d3-aaf5-d6aec687db0e.mov" type="video/mp4" />
-  </video>
-  <figcaption>Demo: Vulnerability Detection</figcaption>
-</figure>
-
-</details>
-
-```bash
-vul fs --scanners vuln,secret,config myproject/
-```
-
-<details>
-<summary>Result</summary>
-
-<figure style="text-align: center">
-  <video width="1000" autoplay muted controls loop>
-    <source src="https://user-images.githubusercontent.com/1161307/171013917-b1f37810-f434-465c-b01a-22de036bd9b3.mov" type="video/mp4" />
-  </video>
-  <figcaption>Demo: Misconfiguration Detection</figcaption>
-</figure>
-
-</details>
-
-```bash
-vul k8s --report summary cluster
-```
-
-<details>
-<summary>Result</summary>
-
-<figure style="text-align: center">
-  <img src="imgs/secret-demo.gif" width="1000">
-  <figcaption>Demo: Secret Detection</figcaption>
-</figure>
-
-</details>
-
-# Want more? Check out Khulnasoft
-
-If you liked Vul, you will love Khulnasoft which builds on top of Vul to provide even more enhanced capabilities for a complete security management offering.  
-You can find a high level comparison table specific to Vul users [here](https://github.com/khulnasoft-lab/resources/blob/main/vul-khulnasoft.md).  
-In addition check out the <https://khulnasoft.com> website for more information about our products and services.
-If you'd like to contact Khulnasoft or request a demo, please use this form: <https://www.khulnasoft.com/demo>
-
----
-
-Vul is an [Khulnasoft Security][khulnasoft] open source project.  
-Learn about our open source work and portfolio [here][oss].  
-Contact us about any matter by opening a GitHub Discussion [here][discussions]
-
-[Ecosystem]: ./ecosystem/index.md
-[Installation]: getting-started/installation.md
-[pronunciation]: #how-to-pronounce-the-name-vul
-[Scanning Coverage]: ./docs/coverage/index.md
-
-[khulnasoft]: https://khulnasoft.com
-[oss]: https://www.khulnasoft.com/products/open-source-projects/
-[discussions]: https://github.com/khulnasoft-lab/vul/discussions
-
-[homepage]: https://vul.dev
-[Tutorials]: ./tutorials/overview
-[Docs]: ./docs
-[Getting Started]: ./
-[Contributing]: ./community/contribute/issue
+!!! note
+    Vul uses vulnerability information from a variety of sources, some of which are licensed for non-commercial use only.

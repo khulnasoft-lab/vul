@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	dbTypes "github.com/khulnasoft-lab/vul-db/pkg/types"
-	"github.com/khulnasoft-lab/vul-db/pkg/vulnsrc/vulnerability"
 	"github.com/khulnasoft-lab/vul/pkg/report"
 	"github.com/khulnasoft-lab/vul/pkg/types"
 )
@@ -17,7 +16,7 @@ func TestReportWriter_JSON(t *testing.T) {
 	testCases := []struct {
 		name          string
 		detectedVulns []types.DetectedVulnerability
-		want          types.Report
+		expectedJSON  report.Results
 	}{
 		{
 			name: "happy path",
@@ -32,30 +31,23 @@ func TestReportWriter_JSON(t *testing.T) {
 						Title:       "foobar",
 						Description: "baz",
 						Severity:    "HIGH",
-						VendorSeverity: map[dbTypes.SourceID]dbTypes.Severity{
-							vulnerability.NVD: dbTypes.SeverityHigh,
-						},
 					},
 				},
 			},
-			want: types.Report{
-				SchemaVersion: 2,
-				ArtifactName:  "alpine:3.14",
-				Results: types.Results{
-					types.Result{
-						Target: "foojson",
-						Vulnerabilities: []types.DetectedVulnerability{
-							{
-								VulnerabilityID:  "CVE-2020-0001",
-								PkgName:          "foo",
-								InstalledVersion: "1.2.3",
-								FixedVersion:     "3.4.5",
-								PrimaryURL:       "https://avd.khulnasoft.com/nvd/cve-2020-0001",
-								Vulnerability: dbTypes.Vulnerability{
-									Title:       "foobar",
-									Description: "baz",
-									Severity:    "HIGH",
-								},
+			expectedJSON: report.Results{
+				report.Result{
+					Target: "foojson",
+					Vulnerabilities: []types.DetectedVulnerability{
+						{
+							VulnerabilityID:  "CVE-2020-0001",
+							PkgName:          "foo",
+							InstalledVersion: "1.2.3",
+							FixedVersion:     "3.4.5",
+							PrimaryURL:       "https://avd.khulnasoft.com/nvd/cve-2020-0001",
+							Vulnerability: dbTypes.Vulnerability{
+								Title:       "foobar",
+								Description: "baz",
+								Severity:    "HIGH",
 							},
 						},
 					},
@@ -66,30 +58,25 @@ func TestReportWriter_JSON(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			jsonWritten := bytes.NewBuffer(nil)
-			jw := report.JSONWriter{
-				Output: jsonWritten,
-			}
+			jw := report.JSONWriter{}
+			jsonWritten := bytes.Buffer{}
+			jw.Output = &jsonWritten
 
-			inputResults := types.Report{
-				SchemaVersion: 2,
-				ArtifactName:  "alpine:3.14",
-				Results: types.Results{
-					{
-						Target:          "foojson",
-						Vulnerabilities: tc.detectedVulns,
-					},
+			inputResults := report.Results{
+				{
+					Target:          "foojson",
+					Vulnerabilities: tc.detectedVulns,
 				},
 			}
 
-			err := jw.Write(inputResults)
+			err := report.WriteResults("json", &jsonWritten, nil, inputResults, "", false)
 			assert.NoError(t, err)
 
-			var got types.Report
-			err = json.Unmarshal(jsonWritten.Bytes(), &got)
-			assert.NoError(t, err, "invalid json written")
+			writtenResults := report.Results{}
+			err = json.Unmarshal([]byte(jsonWritten.String()), &writtenResults)
+			assert.NoError(t, err, "invalid json written", tc.name)
 
-			assert.Equal(t, tc.want, got, tc.name)
+			assert.Equal(t, tc.expectedJSON, writtenResults, tc.name)
 		})
 	}
 }

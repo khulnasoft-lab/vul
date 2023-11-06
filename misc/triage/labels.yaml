@@ -3,17 +3,13 @@ repo: khulnasoft-lab/vul
 labels:
 
 # kind
-- name: kind/breaking
+- name: kind/api-change
   color: e11d21
-  description: Categorizes issue or PR as related to breaking compatibility.
-  from: kind/api-change
+  description: Categorizes issue or PR as related to adding, removing, or otherwise changing an API
 - name: kind/bug
   color: e11d21
   from: bug
   description: Categorizes issue or PR as related to a bug.
-- name: kind/security-advisory
-  color: e11d21
-  description: Categorizes issue or PR as related to security advisories.
 - name: kind/cleanup
   color: c7def8
   description: Categorizes issue or PR as related to cleaning up code, process, or technical debt.
@@ -30,14 +26,14 @@ labels:
 - name: kind/testing
   color: c7def8
   description: Categorizes issue or PR as related to a unit/integration test.
+- name: kind/regression
+  color: e11d21
+  description: Categorizes issue or PR as related to a regression from a prior release.
 - name: kind/security
   color: f4dddc
-  description: Categorizes issue or PR as related to Vul's own security or internal vulnerabilities.
-- name: kind/integration
-  color: f4dddc
-  description: Categorizes issue or PR as related to a third party integration of Vul.
+  description: security issues
 
-# lifecycle for the stale bot
+# lifecycle
 - name: lifecycle/frozen
   color: d3e2f0
   description: Indicates that an issue or PR should not be auto-closed due to staleness.
@@ -90,42 +86,49 @@ labels:
   color: d455d0
   description: Indicates an issue that can not or will not be resolved.
 
-# scanning
-- name: scan/vulnerability
+# component
+- name: co/alpine
   color: d9ead3
-  description: Issues relating to vulnerability scanning
-- name: scan/misconfiguration
+  description: Issues relating to Alpine image
+- name: co/amazon
   color: d9ead3
-  description: Issues relating to misconfiguration scanning
-- name: scan/secret
+  description: Issues relating to Amazon Linux image
+- name: co/debian
   color: d9ead3
-  description: Issues relating to secret scanning
-- name: scan/sbom
+  description: Issues relating to Debian image
+- name: co/oracle
   color: d9ead3
-  description: Issues relating to SBOM
-- name: scan/license
+  description: Issues relating to Oracle Linux image
+- name: co/photon
   color: d9ead3
-  description: Issues relating to license scanning
-
-# target
-- name: target/container-image
-  color: 0ebdb0
-  description: Issues relating to container image scanning
-- name: target/filesystem
-  color: 0ebdb0
-  description: Issues relating to filesystem scanning
-- name: target/repository
-  color: 0ebdb0
-  description: Issues relating to VCS repository scanning
-- name: target/kubernetes
-  color: 0ebdb0
-  description: Issues relating to kubernetes cluster scanning
-- name: target/cloud
-  color: 0ebdb0
-  description: Issues relating to cloud account scanning
-- name: target/vm
-  color: 0ebdb0
-  description: Issues relating to virtual machine scanning
+  description: Issues relating to Photon OS image
+- name: co/redhat
+  color: d9ead3
+  description: Issues relating to RHEL/CentOS image
+- name: co/suse
+  color: d9ead3
+  description: Issues relating to openSUSE/SUSE Linux Enterprise image
+- name: co/ubuntu
+  color: d9ead3
+  description: Issues relating to Ubuntu image
+- name: co/bundler
+  color: d9ead3
+  description: Issues relating to Bundler
+- name: co/cargo
+  color: d9ead3
+  description: Issues relating to Cargo
+- name: co/npm
+  color: d9ead3
+  description: Issues relating to Npm
+- name: co/yarn
+  color: d9ead3
+  description: Issues relating to Yarn
+- name: co/pipenv
+  color: d9ead3
+  description: Issues relating to Pipenv
+- name: co/poetry
+  color: d9ead3
+  description: Issues relating to Poetry
 
 # others
 - name: good first issue

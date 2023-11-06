@@ -1,63 +1,57 @@
 package server
 
 import (
-	"context"
-
+	"github.com/urfave/cli/v2"
 	"golang.org/x/xerrors"
 
 	"github.com/khulnasoft-lab/vul-db/pkg/db"
 	"github.com/khulnasoft-lab/vul/pkg/commands/operation"
-	"github.com/khulnasoft-lab/vul/pkg/flag"
 	"github.com/khulnasoft-lab/vul/pkg/log"
-	"github.com/khulnasoft-lab/vul/pkg/module"
 	rpcServer "github.com/khulnasoft-lab/vul/pkg/rpc/server"
-	"github.com/khulnasoft-lab/vul/pkg/utils/fsutils"
+	"github.com/khulnasoft-lab/vul/pkg/utils"
 )
 
 // Run runs the scan
-func Run(ctx context.Context, opts flag.Options) (err error) {
-	if err = log.InitLogger(opts.Debug, opts.Quiet); err != nil {
+func Run(ctx *cli.Context) error {
+	return run(NewConfig(ctx))
+}
+
+func run(c Config) (err error) {
+	if err = log.InitLogger(c.Debug, c.Quiet); err != nil {
 		return xerrors.Errorf("failed to initialize a logger: %w", err)
 	}
 
+	// initialize config
+	if err = c.Init(); err != nil {
+		return xerrors.Errorf("failed to initialize options: %w", err)
+	}
+
 	// configure cache dir
-	fsutils.SetCacheDir(opts.CacheDir)
-	cache, err := operation.NewCache(opts.CacheOptions)
+	utils.SetCacheDir(c.CacheDir)
+	cache, err := operation.NewCache(c.CacheBackend)
 	if err != nil {
 		return xerrors.Errorf("server cache error: %w", err)
 	}
 	defer cache.Close()
-	log.Logger.Debugf("cache dir:  %s", fsutils.CacheDir())
+	log.Logger.Debugf("cache dir:  %s", utils.CacheDir())
 
-	if opts.Reset {
+	if c.Reset {
 		return cache.ClearDB()
 	}
 
 	// download the database file
-	if err = operation.DownloadDB(ctx, opts.AppVersion, opts.CacheDir, opts.DBRepository,
-		true, opts.SkipDBUpdate, opts.RegistryOpts()); err != nil {
+	if err = operation.DownloadDB(c.AppVersion, c.CacheDir, true, false, c.SkipUpdate); err != nil {
 		return err
 	}
 
-	if opts.DownloadDBOnly {
+	if c.DownloadDBOnly {
 		return nil
 	}
 
-	if err = db.Init(opts.CacheDir); err != nil {
+	if err = db.Init(c.CacheDir); err != nil {
 		return xerrors.Errorf("error in vulnerability DB initialize: %w", err)
 	}
 
-	// Initialize WASM modules
-	m, err := module.NewManager(ctx, module.Options{
-		Dir:            opts.ModuleDir,
-		EnabledModules: opts.EnabledModules,
-	})
-	if err != nil {
-		return xerrors.Errorf("WASM module error: %w", err)
-	}
-	m.Register()
-
-	server := rpcServer.NewServer(opts.AppVersion, opts.Listen, opts.CacheDir, opts.Token, opts.TokenHeader,
-		opts.DBRepository, opts.RegistryOpts())
-	return server.ListenAndServe(cache, opts.SkipDBUpdate)
+	server := rpcServer.NewServer(c.AppVersion, c.Listen, c.CacheDir, c.Token, c.TokenHeader)
+	return server.ListenAndServe(cache)
 }

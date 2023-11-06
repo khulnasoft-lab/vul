@@ -2,16 +2,18 @@ package commands
 
 import (
 	"bytes"
-	"io"
+	"encoding/json"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
-	"github.com/spf13/cobra"
+	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	dbTypes "github.com/khulnasoft-lab/vul-db/pkg/types"
-	"github.com/khulnasoft-lab/vul/pkg/flag"
-	"github.com/khulnasoft-lab/vul/pkg/types"
+	"github.com/khulnasoft-lab/vul-db/pkg/db"
 )
 
 func Test_showVersion(t *testing.T) {
@@ -21,274 +23,98 @@ func Test_showVersion(t *testing.T) {
 		version      string
 	}
 	tests := []struct {
-		name string
-		args args
-		want string
+		name           string
+		args           args
+		createDB       bool
+		expectedOutput string
 	}{
 		{
 			name: "happy path, table output",
 			args: args{
 				outputFormat: "table",
-				version:      "dev",
-				cacheDir:     "testdata",
+				version:      "v1.2.3",
 			},
-			want: `Version: dev
+			expectedOutput: `Version: v1.2.3
 Vulnerability DB:
-  Version: 2
-  UpdatedAt: 2022-03-02 06:07:07.99504083 +0000 UTC
-  NextUpdate: 2022-03-02 12:07:07.99504023 +0000 UTC
-  DownloadedAt: 2022-03-02 10:03:38.383312 +0000 UTC
-Java DB:
-  Version: 1
-  UpdatedAt: 2023-03-14 00:47:02.774253754 +0000 UTC
-  NextUpdate: 2023-03-17 00:47:02.774253254 +0000 UTC
-  DownloadedAt: 2023-03-14 03:04:55.058541039 +0000 UTC
-Policy Bundle:
-  Digest: sha256:19a017cdc798631ad42f6f4dce823d77b2989128f0e1a7f9bc83ae3c59024edd
-  DownloadedAt: 2023-03-02 01:06:08.191725 +0000 UTC
+  Type: Light
+  Version: 42
+  UpdatedAt: 2020-03-16 23:40:20 +0000 UTC
+  NextUpdate: 2020-03-16 23:57:00 +0000 UTC
+  DownloadedAt: 2020-03-16 23:40:20 +0000 UTC
+`,
+			createDB: true,
+		},
+		{
+			name: "happy path, JSON output",
+			args: args{
+				outputFormat: "json",
+				version:      "1.2.3",
+			},
+			expectedOutput: `{"Version":"1.2.3","VulnerabilityDB":{"Version":42,"Type":1,"NextUpdate":"2020-03-16T23:57:00Z","UpdatedAt":"2020-03-16T23:40:20Z","DownloadedAt":"2020-03-16T23:40:20Z"}}
+`,
+			createDB: true,
+		},
+		{
+			name: "sad path, no DB is available",
+			args: args{
+				outputFormat: "json",
+				version:      "1.2.3",
+			},
+			expectedOutput: `{"Version":"1.2.3"}
 `,
 		},
 		{
 			name: "sad path, bogus cache dir",
 			args: args{
 				outputFormat: "json",
-				version:      "dev",
+				version:      "1.2.3",
 				cacheDir:     "/foo/bar/bogus",
 			},
-			want: `{"Version":"dev"}
+			expectedOutput: `{"Version":"1.2.3"}
 `,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := new(bytes.Buffer)
-			showVersion(tt.args.cacheDir, tt.args.outputFormat, got)
-			assert.Equal(t, tt.want, got.String(), tt.name)
+			var cacheDir string
+			switch {
+			case tt.args.cacheDir != "":
+				cacheDir = tt.args.cacheDir
+			default:
+				cacheDir, _ = ioutil.TempDir("", "Test_showVersion-*")
+				defer os.RemoveAll(cacheDir)
+			}
+
+			if tt.createDB {
+				fs := afero.NewOsFs()
+				err := os.MkdirAll(filepath.Join(cacheDir, "db"), os.ModePerm)
+				require.NoError(t, err)
+				metadataFile := filepath.Join(cacheDir, "db", "metadata.json")
+
+				b, err := json.Marshal(db.Metadata{
+					Version:      42,
+					Type:         1,
+					NextUpdate:   time.Unix(1584403020, 0),
+					UpdatedAt:    time.Unix(1584402020, 0),
+					DownloadedAt: time.Unix(1584402020, 0),
+				})
+				require.NoError(t, err)
+				err = afero.WriteFile(fs, metadataFile, b, 0600)
+				require.NoError(t, err)
+			}
+
+			fw := new(bytes.Buffer)
+			showVersion(cacheDir, tt.args.outputFormat, tt.args.version, fw)
+			assert.Equal(t, tt.expectedOutput, fw.String(), tt.name)
 		})
 	}
 }
 
-// Check flag and command for print version
-func TestPrintVersion(t *testing.T) {
-	tableOutput := `Version: dev
-Vulnerability DB:
-  Version: 2
-  UpdatedAt: 2022-03-02 06:07:07.99504083 +0000 UTC
-  NextUpdate: 2022-03-02 12:07:07.99504023 +0000 UTC
-  DownloadedAt: 2022-03-02 10:03:38.383312 +0000 UTC
-Java DB:
-  Version: 1
-  UpdatedAt: 2023-03-14 00:47:02.774253754 +0000 UTC
-  NextUpdate: 2023-03-17 00:47:02.774253254 +0000 UTC
-  DownloadedAt: 2023-03-14 03:04:55.058541039 +0000 UTC
-Policy Bundle:
-  Digest: sha256:19a017cdc798631ad42f6f4dce823d77b2989128f0e1a7f9bc83ae3c59024edd
-  DownloadedAt: 2023-03-02 01:06:08.191725 +0000 UTC
-`
-	jsonOutput := `{"Version":"dev","VulnerabilityDB":{"Version":2,"NextUpdate":"2022-03-02T12:07:07.99504023Z","UpdatedAt":"2022-03-02T06:07:07.99504083Z","DownloadedAt":"2022-03-02T10:03:38.383312Z"},"JavaDB":{"Version":1,"NextUpdate":"2023-03-17T00:47:02.774253254Z","UpdatedAt":"2023-03-14T00:47:02.774253754Z","DownloadedAt":"2023-03-14T03:04:55.058541039Z"},"PolicyBundle":{"Digest":"sha256:19a017cdc798631ad42f6f4dce823d77b2989128f0e1a7f9bc83ae3c59024edd","DownloadedAt":"2023-03-02T01:06:08.191725Z"}}
-`
-	tests := []struct {
-		name      string
-		arguments []string // 1st argument is path to vul binaries
-		want      string
-	}{
-		{
-			name: "happy path. '-v' flag is used",
-			arguments: []string{
-				"-v",
-				"--cache-dir",
-				"testdata",
-			},
-			want: tableOutput,
-		},
-		{
-			name: "happy path. '-version' flag is used",
-			arguments: []string{
-				"--version",
-				"--cache-dir",
-				"testdata",
-			},
-			want: tableOutput,
-		},
-		{
-			name: "happy path. 'version' command is used",
-			arguments: []string{
-				"--cache-dir",
-				"testdata",
-				"version",
-			},
-			want: tableOutput,
-		},
-		{
-			name: "happy path. 'version', '--format json' flags are used",
-			arguments: []string{
-				"--cache-dir",
-				"testdata",
-				"version",
-				"--format",
-				"json",
-			},
-			want: jsonOutput,
-		},
-		{
-			name: "happy path. '-v', '--format json' flags are used",
-			arguments: []string{
-				"--cache-dir",
-				"testdata",
-				"-v",
-				"--format",
-				"json",
-			},
-			want: jsonOutput,
-		},
-		{
-			name: "happy path. '--version', '--format json' flags are used",
-			arguments: []string{
-				"--cache-dir",
-				"testdata",
-				"--version",
-				"--format",
-				"json",
-			},
-			want: jsonOutput,
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			got := new(bytes.Buffer)
-			app := NewApp()
-			app.SetOut(got)
-			app.SetArgs(test.arguments)
-
-			err := app.Execute()
-			require.NoError(t, err)
-			assert.Equal(t, test.want, got.String())
-		})
-	}
-}
-
-func TestFlags(t *testing.T) {
-	type want struct {
-		format     types.Format
-		severities []dbTypes.Severity
-	}
-	tests := []struct {
-		name      string
-		arguments []string // 1st argument is path to vul binaries
-		want      want
-		wantErr   string
-	}{
-		{
-			name: "happy path",
-			arguments: []string{
-				"test",
-			},
-			want: want{
-				format: types.FormatTable,
-				severities: []dbTypes.Severity{
-					dbTypes.SeverityUnknown,
-					dbTypes.SeverityLow,
-					dbTypes.SeverityMedium,
-					dbTypes.SeverityHigh,
-					dbTypes.SeverityCritical,
-				},
-			},
-		},
-		{
-			name: "happy path with comma-separated severities",
-			arguments: []string{
-				"test",
-				"--severity",
-				"LOW,MEDIUM",
-			},
-			want: want{
-				format: types.FormatTable,
-				severities: []dbTypes.Severity{
-					dbTypes.SeverityLow,
-					dbTypes.SeverityMedium,
-				},
-			},
-		},
-		{
-			name: "happy path with repeated severities",
-			arguments: []string{
-				"test",
-				"--severity",
-				"LOW",
-				"--severity",
-				"HIGH",
-			},
-			want: want{
-				format: types.FormatTable,
-				severities: []dbTypes.Severity{
-					dbTypes.SeverityLow,
-					dbTypes.SeverityHigh,
-				},
-			},
-		},
-		{
-			name: "happy path with json",
-			arguments: []string{
-				"test",
-				"--format",
-				"json",
-				"--severity",
-				"CRITICAL",
-			},
-			want: want{
-				format: types.FormatJSON,
-				severities: []dbTypes.Severity{
-					dbTypes.SeverityCritical,
-				},
-			},
-		},
-		{
-			name: "invalid format",
-			arguments: []string{
-				"test",
-				"--format",
-				"foo",
-			},
-			wantErr: `invalid argument "foo" for "-f, --format" flag`,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			globalFlags := flag.NewGlobalFlagGroup()
-			rootCmd := NewRootCommand(globalFlags)
-			rootCmd.SetErr(io.Discard)
-			rootCmd.SetOut(io.Discard)
-
-			flags := &flag.Flags{
-				ReportFlagGroup: flag.NewReportFlagGroup(),
-			}
-			cmd := &cobra.Command{
-				Use: "test",
-				RunE: func(cmd *cobra.Command, args []string) error {
-					// Bind
-					require.NoError(t, flags.Bind(cmd))
-
-					options, err := flags.ToOptions(args, globalFlags)
-					require.NoError(t, err)
-
-					assert.Equal(t, tt.want.format, options.Format)
-					assert.Equal(t, tt.want.severities, options.Severities)
-					return nil
-				},
-			}
-			flags.AddFlags(cmd)
-			rootCmd.AddCommand(cmd)
-
-			rootCmd.SetArgs(tt.arguments)
-
-			err := rootCmd.Execute()
-			if tt.wantErr != "" {
-				assert.ErrorContains(t, err, tt.wantErr)
-				return
-			}
-			require.NoError(t, err)
-		})
-	}
+func TestNewCommands(t *testing.T) {
+	NewApp("test")
+	NewClientCommand()
+	NewFilesystemCommand()
+	NewImageCommand()
+	NewRepositoryCommand()
+	NewServerCommand()
 }

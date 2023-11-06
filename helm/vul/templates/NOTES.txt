@@ -1,2 +1,2 @@
-You should be able to access Vul server installation within
+You should be able to access Trivy server installation within
 the cluster at http://{{ include "vul.fullname" . }}.{{ .Release.Namespace }}:{{ .Values.service.port }}

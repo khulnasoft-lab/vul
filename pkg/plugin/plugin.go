@@ -2,23 +2,22 @@ package plugin
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 
 	"golang.org/x/xerrors"
-	"gopkg.in/yaml.v3"
+	yaml "gopkg.in/yaml.v3"
 
 	"github.com/khulnasoft-lab/vul/pkg/downloader"
 	"github.com/khulnasoft-lab/vul/pkg/log"
-	"github.com/khulnasoft-lab/vul/pkg/utils/fsutils"
+	"github.com/khulnasoft-lab/vul/pkg/utils"
 )
 
 const (
-	configFile = "plugin.yaml"
+	configFile  = "plugin.yaml"
+	xdgDataHome = "XDG_DATA_HOME"
 )
 
 var (
@@ -26,7 +25,6 @@ var (
 
 	officialPlugins = map[string]string{
 		"kubectl": "github.com/khulnasoft-lab/vul-plugin-kubectl",
-		"khulnasoft":    "github.com/khulnasoft-lab/vul-plugin-khulnasoft",
 	}
 )
 
@@ -171,7 +169,7 @@ func Install(ctx context.Context, url string, force bool) (Plugin, error) {
 	}
 
 	// Copy plugin.yaml into the plugin dir
-	if _, err = fsutils.CopyFile(filepath.Join(tempDir, configFile), filepath.Join(pluginDir, configFile)); err != nil {
+	if _, err = utils.CopyFile(filepath.Join(tempDir, configFile), filepath.Join(pluginDir, configFile)); err != nil {
 		return Plugin{}, xerrors.Errorf("failed to copy plugin.yaml: %w", err)
 	}
 
@@ -182,79 +180,6 @@ func Install(ctx context.Context, url string, force bool) (Plugin, error) {
 func Uninstall(name string) error {
 	pluginDir := filepath.Join(dir(), name)
 	return os.RemoveAll(pluginDir)
-}
-
-// Information gets the information about an installed plugin
-func Information(name string) (string, error) {
-	pluginDir := filepath.Join(dir(), name)
-
-	if _, err := os.Stat(pluginDir); err != nil {
-		if os.IsNotExist(err) {
-			return "", xerrors.Errorf("could not find a plugin called '%s', did you install it?", name)
-		}
-		return "", xerrors.Errorf("stat error: %w", err)
-	}
-
-	plugin, err := loadMetadata(pluginDir)
-	if err != nil {
-		return "", xerrors.Errorf("unable to load metadata: %w", err)
-	}
-
-	return fmt.Sprintf(`
-Plugin: %s
-  Description: %s
-  Version:     %s
-  Usage:       %s
-`, plugin.Name, plugin.Description, plugin.Version, plugin.Usage), nil
-}
-
-// List gets a list of all installed plugins
-func List() (string, error) {
-	if _, err := os.Stat(dir()); err != nil {
-		if os.IsNotExist(err) {
-			return "No Installed Plugins\n", nil
-		}
-		return "", xerrors.Errorf("stat error: %w", err)
-	}
-	plugins, err := LoadAll()
-	if err != nil {
-		return "", xerrors.Errorf("unable to load plugins: %w", err)
-	}
-	pluginList := []string{"Installed Plugins:"}
-	for _, plugin := range plugins {
-		pluginList = append(pluginList, fmt.Sprintf("  Name:    %s\n  Version: %s\n", plugin.Name, plugin.Version))
-	}
-
-	return strings.Join(pluginList, "\n"), nil
-}
-
-// Update updates an existing plugin
-func Update(name string) error {
-	pluginDir := filepath.Join(dir(), name)
-
-	if _, err := os.Stat(pluginDir); err != nil {
-		if os.IsNotExist(err) {
-			return xerrors.Errorf("could not find a plugin called '%s' to update: %w", name, err)
-		}
-		return err
-	}
-
-	plugin, err := loadMetadata(pluginDir)
-	if err != nil {
-		return err
-	}
-	log.Logger.Infof("Updating plugin '%s'", name)
-	updated, err := Install(nil, plugin.Repository, true)
-	if err != nil {
-		return xerrors.Errorf("unable to perform an update installation: %w", err)
-	}
-
-	if plugin.Version == updated.Version {
-		log.Logger.Infof("The %s plugin is the latest version. [%s]", name, plugin.Version)
-	} else {
-		log.Logger.Infof("Updated '%s' from %s to %s", name, plugin.Version, updated.Version)
-	}
-	return nil
 }
 
 // LoadAll loads all plugins
@@ -280,24 +205,6 @@ func LoadAll() ([]Plugin, error) {
 	return plugins, nil
 }
 
-// RunWithArgs runs the plugin with arguments
-func RunWithArgs(ctx context.Context, url string, args []string) error {
-	pl, err := Install(ctx, url, false)
-	if err != nil {
-		return xerrors.Errorf("plugin install error: %w", err)
-	}
-
-	if err = pl.Run(ctx, args); err != nil {
-		return xerrors.Errorf("unable to run %s plugin: %w", pl.Name, err)
-	}
-	return nil
-}
-
-func IsPredefined(name string) bool {
-	_, ok := officialPlugins[name]
-	return ok
-}
-
 func loadMetadata(dir string) (Plugin, error) {
 	filePath := filepath.Join(dir, configFile)
 	f, err := os.Open(filePath)
@@ -314,7 +221,13 @@ func loadMetadata(dir string) (Plugin, error) {
 }
 
 func dir() string {
-	return filepath.Join(fsutils.HomeDir(), pluginsRelativeDir)
+	dataHome := os.Getenv(xdgDataHome)
+	if dataHome != "" {
+		return filepath.Join(dataHome, pluginsRelativeDir)
+	}
+
+	homeDir, _ := os.UserHomeDir()
+	return filepath.Join(homeDir, pluginsRelativeDir)
 }
 
 func isInstalled(url string) (Plugin, bool) {

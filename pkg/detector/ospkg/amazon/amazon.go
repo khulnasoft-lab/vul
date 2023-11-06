@@ -7,11 +7,10 @@ import (
 	version "github.com/khulnasoft-lab/go-deb-version"
 	"go.uber.org/zap"
 	"golang.org/x/xerrors"
-	"k8s.io/utils/clock"
 
+	ftypes "github.com/aquasecurity/fanal/types"
+	dbTypes "github.com/khulnasoft-lab/vul-db/pkg/types"
 	"github.com/khulnasoft-lab/vul-db/pkg/vulnsrc/amazon"
-	osver "github.com/khulnasoft-lab/vul/pkg/detector/ospkg/version"
-	ftypes "github.com/khulnasoft-lab/vul/pkg/fanal/types"
 	"github.com/khulnasoft-lab/vul/pkg/log"
 	"github.com/khulnasoft-lab/vul/pkg/scanner/utils"
 	"github.com/khulnasoft-lab/vul/pkg/types"
@@ -19,56 +18,32 @@ import (
 
 var (
 	eolDates = map[string]time.Time{
-		// https://aws.amazon.com/jp/blogs/aws/update-on-amazon-linux-ami-end-of-life/
-		"1": time.Date(2023, 12, 31, 23, 59, 59, 0, time.UTC),
-		// https://aws.amazon.com/amazon-linux-2/faqs/?nc1=h_ls
-		"2": time.Date(2025, 6, 30, 23, 59, 59, 0, time.UTC),
-		// Amazon Linux 2022 was renamed to 2023. AL2022 is not currently supported.
-		"2023": time.Date(2028, 3, 15, 23, 59, 59, 0, time.UTC),
+		"1": time.Date(2023, 6, 30, 23, 59, 59, 0, time.UTC),
+		// N/A
+		"2": time.Date(3000, 1, 1, 23, 59, 59, 0, time.UTC),
 	}
 )
 
-type options struct {
-	clock clock.Clock
-	l     *zap.SugaredLogger
-}
-
-type option func(*options)
-
-func WithClock(c clock.Clock) option {
-	return func(opts *options) {
-		opts.clock = c
-	}
-}
-
 // Scanner to scan amazon vulnerabilities
 type Scanner struct {
-	ac amazon.VulnSrc
-	options
+	l  *zap.SugaredLogger
+	ac dbTypes.VulnSrc
 }
 
 // NewScanner is the factory method to return Amazon scanner
-func NewScanner(opts ...option) *Scanner {
-	o := &options{
-		l:     log.Logger,
-		clock: clock.RealClock{},
-	}
-
-	for _, opt := range opts {
-		opt(o)
-	}
+func NewScanner() *Scanner {
 	return &Scanner{
-		ac:      amazon.NewVulnSrc(),
-		options: *o,
+		l:  log.Logger,
+		ac: amazon.NewVulnSrc(),
 	}
 }
 
 // Detect scans the packages using amazon scanner
-func (s *Scanner) Detect(osVer string, _ *ftypes.Repository, pkgs []ftypes.Package) ([]types.DetectedVulnerability, error) {
+func (s *Scanner) Detect(osVer string, pkgs []ftypes.Package) ([]types.DetectedVulnerability, error) {
 	log.Logger.Info("Detecting Amazon Linux vulnerabilities...")
 
 	osVer = strings.Fields(osVer)[0]
-	if osVer != "2" && osVer != "2022" && osVer != "2023" {
+	if osVer != "2" {
 		osVer = "1"
 	}
 	log.Logger.Debugf("amazon: os version: %s", osVer)
@@ -102,14 +77,10 @@ func (s *Scanner) Detect(osVer string, _ *ftypes.Repository, pkgs []ftypes.Packa
 			if installedVersion.LessThan(fixedVersion) {
 				vuln := types.DetectedVulnerability{
 					VulnerabilityID:  adv.VulnerabilityID,
-					PkgID:            pkg.ID,
 					PkgName:          pkg.Name,
 					InstalledVersion: installed,
 					FixedVersion:     adv.FixedVersion,
-					PkgRef:           pkg.Ref,
 					Layer:            pkg.Layer,
-					Custom:           adv.Custom,
-					DataSource:       adv.DataSource,
 				}
 				vulns = append(vulns, vuln)
 			}
@@ -118,12 +89,21 @@ func (s *Scanner) Detect(osVer string, _ *ftypes.Repository, pkgs []ftypes.Packa
 	return vulns, nil
 }
 
-// IsSupportedVersion checks if the version is supported.
-func (s *Scanner) IsSupportedVersion(osFamily ftypes.OSType, osVer string) bool {
+// IsSupportedVersion checks if os can be scanned using amazon scanner
+func (s *Scanner) IsSupportedVersion(osFamily, osVer string) bool {
+	now := time.Now()
+	return s.isSupportedVersion(now, osFamily, osVer)
+}
+
+func (s *Scanner) isSupportedVersion(now time.Time, osFamily, osVer string) bool {
 	osVer = strings.Fields(osVer)[0]
-	if osVer != "2" && osVer != "2022" && osVer != "2023" {
+	if osVer != "2" {
 		osVer = "1"
 	}
-
-	return osver.Supported(s.clock, eolDates, osFamily, osVer)
+	eol, ok := eolDates[osVer]
+	if !ok {
+		log.Logger.Warnf("This OS version is not on the EOL list: %s %s", osFamily, osVer)
+		return false
+	}
+	return now.Before(eol)
 }

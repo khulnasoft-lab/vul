@@ -75,12 +75,10 @@ get_binaries() {
     linux/ppc64le) BINARIES="vul" ;;
     linux/arm64) BINARIES="vul" ;;
     linux/armv7) BINARIES="vul" ;;
-    linux/s390x) BINARIES="vul" ;;
     openbsd/386) BINARIES="vul" ;;
     openbsd/amd64) BINARIES="vul" ;;
     openbsd/arm64) BINARIES="vul" ;;
     openbsd/armv7) BINARIES="vul" ;;
-    windows/amd64) BINARIES="vul" ;;
     *)
       log_crit "platform $PLATFORM is not supported.  Make sure this script is up-to-date and file request at https://github.com/${PREFIX}/issues/new"
       exit 1
@@ -104,9 +102,6 @@ tag_to_version() {
 }
 adjust_format() {
   # change format (tar.gz or zip) based on OS
-  case ${OS} in
-    windows) FORMAT=zip ;;
-  esac
   true
 }
 adjust_os() {
@@ -116,8 +111,7 @@ adjust_os() {
     amd64) OS=64bit ;;
     arm) OS=ARM ;;
     arm64) OS=ARM64 ;;
-    ppc64le) OS=Linux ;;
-    s390x) OS=Linux ;;
+    ppc64le) OS=PPC64LE ;;
     darwin) OS=macOS ;;
     dragonfly) OS=DragonFlyBSD ;;
     freebsd) OS=FreeBSD ;;
@@ -133,10 +127,8 @@ adjust_arch() {
     386) ARCH=32bit ;;
     amd64) ARCH=64bit ;;
     arm) ARCH=ARM ;;
-    armv7) ARCH=ARM ;;
     arm64) ARCH=ARM64 ;;
-    ppc64le) ARCH=PPC64LE ;;
-    s390x) ARCH=s390x ;;
+    ppc64le) OS=PPC64LE ;;
     darwin) ARCH=macOS ;;
     dragonfly) ARCH=DragonFlyBSD ;;
     freebsd) ARCH=FreeBSD ;;
@@ -190,11 +182,11 @@ log_tag() {
 }
 log_debug() {
   log_priority 7 || return 0
-  echo "$(log_prefix)" "$(log_tag 7)" "$@"
+  echoerr "$(log_prefix)" "$(log_tag 7)" "$@"
 }
 log_info() {
   log_priority 6 || return 0
-  echo "$(log_prefix)" "$(log_tag 6)" "$@"
+  echoerr "$(log_prefix)" "$(log_tag 6)" "$@"
 }
 log_err() {
   log_priority 3 || return 0
@@ -225,7 +217,6 @@ uname_arch() {
     armv5*) arch="armv5" ;;
     armv6*) arch="armv6" ;;
     armv7*) arch="armv7" ;;
-    s390*) arch="s390x" ;;
   esac
   echo ${arch}
 }
@@ -380,7 +371,7 @@ End of functions from https://github.com/client9/shlib
 EOF
 
 PROJECT_NAME="vul"
-OWNER=khulnasoft-lab
+OWNER=khulnasoft
 REPO="vul"
 BINARY=vul
 FORMAT=tar.gz
