@@ -1,11 +1,10 @@
 {{- /* Template based on https://docs.gitlab.com/ee/user/application_security/container_scanning/#reports-json-format */ -}}
 {
-  "version": "14.0.6",
+  "version": "2.3",
   "vulnerabilities": [
   {{- $t_first := true }}
   {{- range . }}
   {{- $target := .Target }}
-    {{- $image := $target | regexFind "[^\\s]+" }}
     {{- range .Vulnerabilities -}}
     {{- if $t_first -}}
       {{- $t_first = false -}}
@@ -32,6 +31,8 @@
                   {{-  else -}}
                     "{{ .Severity }}"
                   {{- end }},
+      {{- /* TODO: Define confidence */}}
+      "confidence": "Unknown",
       "solution": {{ if .FixedVersion -}}
                     "Upgrade {{ .PkgName }} to {{ .FixedVersion }}"
                   {{- else -}}
@@ -50,7 +51,7 @@
         },
         {{- /* TODO: No mapping available - https://github.com/khulnasoft-lab/vul/issues/332 */}}
         "operating_system": "Unknown",
-        "image": "{{ $image }}"
+        "image": "{{ $target }}"
       },
       "identifiers": [
         {
@@ -70,7 +71,7 @@
           ,
         {{- end -}}
         {
-          "url": "{{ regexFind "[^ ]+" . }}"
+          "url": "{{ . }}"
         }
         {{- end }}
       ]

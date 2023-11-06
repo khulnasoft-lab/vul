@@ -1,161 +1,78 @@
-{
-    "Findings": [
-    {{- $t_first := true -}}
-    {{- range . -}}
-    {{- $target := .Target -}}
-    {{- $image := .Target -}}
-    {{- if gt (len $image) 127 -}}
-        {{- $image = $image | regexFind ".{124}$" | printf "...%v" -}}
-    {{- end}}
-    {{- range .Vulnerabilities -}}
-    {{- if $t_first -}}
-      {{- $t_first = false -}}
-    {{- else -}}
-      ,
-    {{- end -}}
-    {{- $severity := .Severity -}}
-    {{- if eq $severity "UNKNOWN" -}}
-    {{- $severity = "INFORMATIONAL" -}}
-    {{- end -}}
-    {{- $description := .Description -}}
-    {{- if gt (len $description ) 512 -}}
-        {{- $description = (substr 0 512 $description) | printf "%v .." -}}
-    {{- end}}
-        {
-            "SchemaVersion": "2018-10-08",
-            "Id": "{{ $target }}/{{ .VulnerabilityID }}",
-            "ProductArn": "arn:aws:securityhub:{{ env "AWS_REGION" }}::product/khulnasoft-lab/khulnasoft-lab",
-            "GeneratorId": "Vul/{{ .VulnerabilityID }}",
-            "AwsAccountId": "{{ env "AWS_ACCOUNT_ID" }}",
-            "Types": [ "Software and Configuration Checks/Vulnerabilities/CVE" ],
-            "CreatedAt": "{{ now | date "2006-01-02T15:04:05.999999999Z07:00" }}",
-            "UpdatedAt": "{{ now | date "2006-01-02T15:04:05.999999999Z07:00" }}",
-            "Severity": {
-                "Label": "{{ $severity }}"
-            },
-            "Title": "Vul found a vulnerability to {{ .VulnerabilityID }} in container {{ $target }}, related to {{ .PkgName }}",
-            "Description": {{ escapeString $description | printf "%q" }},
-            {{ if not (empty .PrimaryURL) -}}
-            "Remediation": {
-                "Recommendation": {
-                    "Text": "More information on this vulnerability is provided in the hyperlink",
-                    "Url": "{{ .PrimaryURL }}"
-                }
-            },
-            {{ end -}}
-            "ProductFields": { "Product Name": "Vul" },
-            "Resources": [
-                {
-                    "Type": "Container",
-                    "Id": "{{ $target }}",
-                    "Partition": "aws",
-                    "Region": "{{ env "AWS_REGION" }}",
-                    "Details": {
-                        "Container": { "ImageName": "{{ $image }}" },
-                        "Other": {
-                            "CVE ID": "{{ .VulnerabilityID }}",
-                            "CVE Title": {{ .Title | printf "%q" }},
-                            "PkgName": "{{ .PkgName }}",
-                            "Installed Package": "{{ .InstalledVersion }}",
-                            "Patched Package": "{{ .FixedVersion }}",
-                            "NvdCvssScoreV3": "{{ (index .CVSS (sourceID "nvd")).V3Score }}",
-                            "NvdCvssVectorV3": "{{ (index .CVSS (sourceID "nvd")).V3Vector }}",
-                            "NvdCvssScoreV2": "{{ (index .CVSS (sourceID "nvd")).V2Score }}",
-                            "NvdCvssVectorV2": "{{ (index .CVSS (sourceID "nvd")).V2Vector }}"
-                        }
+[
+{{- $t_first := true -}}
+{{- range . -}}
+{{- $target := .Target -}}
+{{- range .Vulnerabilities -}}
+{{- if $t_first -}}
+  {{- $t_first = false -}}
+{{- else -}}
+  ,
+{{- end -}}
+{{- $vulProductSev := 0 -}}
+{{- $vulNormalizedSev := 0 -}}
+{{- if eq .Severity "LOW" -}}
+    {{- $vulProductSev = 1 -}}
+    {{- $vulNormalizedSev = 10 -}}
+  {{- else if eq .Severity "MEDIUM" -}}
+    {{- $vulProductSev = 4 -}}
+    {{- $vulNormalizedSev = 40 -}}
+  {{- else if eq .Severity "HIGH" -}}
+    {{- $vulProductSev = 7 -}}
+    {{- $vulNormalizedSev = 70 -}}
+  {{- else if eq .Severity "CRITICAL" -}}
+    {{- $vulProductSev = 9 -}}
+    {{- $vulNormalizedSev = 90 -}}
+{{- end }}
+{{- $description := .Description -}}
+{{- if gt (len $description ) 1021 -}}
+    {{- $description = (slice $description 0 1021) | printf "%v .." -}}
+{{- end}}
+    {
+        "SchemaVersion": "2018-10-08",
+        "Id": "{{ $target }}/{{ .VulnerabilityID }}",
+        "ProductArn": "arn:aws:securityhub:{{ getEnv "AWS_REGION" }}::product/khulnasoft/aquasecurity",
+        "GeneratorId": "Vul",
+        "AwsAccountId": "{{ getEnv "AWS_ACCOUNT_ID" }}",
+        "Types": [ "Software and Configuration Checks/Vulnerabilities/CVE" ],
+        "CreatedAt": "{{ getCurrentTime }}",
+        "UpdatedAt": "{{ getCurrentTime }}",
+        "Severity": {
+            "Product": {{ $vulProductSev }},
+            "Normalized": {{ $vulNormalizedSev }}
+        },
+        "Title": "Vul found a vulnerability to {{ .VulnerabilityID }} in container {{ $target }}",
+        "Description": {{ escapeString $description | printf "%q" }},
+        "Remediation": {
+            "Recommendation": {
+                "Text": "More information on this vulnerability is provided in the hyperlink",
+                "Url": "{{ .PrimaryURL }}"
+            }
+        },
+        "ProductFields": { "Product Name": "Vul" },
+        "Resources": [
+            {
+                "Type": "Container",
+                "Id": "{{ $target }}",
+                "Partition": "aws",
+                "Region": "{{ getEnv "AWS_REGION" }}",
+                "Details": {
+                    "Container": { "ImageName": "{{ $target }}" },
+                    "Other": {
+                        "CVE ID": "{{ .VulnerabilityID }}",
+                        "CVE Title": {{ .Title | printf "%q" }},
+                        "PkgName": "{{ .PkgName }}",
+                        "Installed Package": "{{ .InstalledVersion }}",
+                        "Patched Package": "{{ .FixedVersion }}",
+                        "NvdCvssScoreV3": "{{ (index .CVSS "nvd").V3Score }}",
+                        "NvdCvssVectorV3": "{{ (index .CVSS "nvd").V3Vector }}",
+                        "NvdCvssScoreV2": "{{ (index .CVSS "nvd").V2Score }}",
+                        "NvdCvssVectorV2": "{{ (index .CVSS "nvd").V2Vector }}"
                     }
                 }
-            ],
-            "RecordState": "ACTIVE"
-        }
-        {{- end -}}
-        {{- range .Misconfigurations -}}
-            {{- if $t_first -}}{{- $t_first = false -}}{{- else -}},{{- end -}}
-            {{- $severity := .Severity -}}
-            {{- if eq $severity "UNKNOWN" -}}
-                {{- $severity = "INFORMATIONAL" -}}
-            {{- end -}}
-            {{- $description := .Description -}}
-            {{- if gt (len $description ) 512 -}}
-                {{- $description = (substr 0 512 $description) | printf "%v .." -}}
-            {{- end}}
-        {
-            "SchemaVersion": "2018-10-08",
-            "Id": "{{ $target }}/{{ .ID }}",
-            "ProductArn": "arn:aws:securityhub:{{ env "AWS_REGION" }}::product/khulnasoft-lab/khulnasoft-lab",
-            "GeneratorId": "Vul/{{ .ID }}",
-            "AwsAccountId": "{{ env "AWS_ACCOUNT_ID" }}",
-            "Types": [ "Software and Configuration Checks" ],
-            "CreatedAt": "{{ now | date "2006-01-02T15:04:05.999999999Z07:00" }}",
-            "UpdatedAt": "{{ now | date "2006-01-02T15:04:05.999999999Z07:00" }}",
-            "Severity": {
-                "Label": "{{ $severity }}"
-            },
-            "Title": "Vul found a misconfiguration in {{ $target }}: {{ .Title }}",
-            "Description": {{ escapeString $description | printf "%q" }},
-            "Remediation": {
-                "Recommendation": {
-                    "Text": "{{ .Resolution }}",
-                    "Url": "{{ .PrimaryURL }}"
-                }
-            },
-            "ProductFields": { "Product Name": "Vul" },
-            "Resources": [
-                {
-                    "Type": "Other",
-                    "Id": "{{ $target }}",
-                    "Partition": "aws",
-                    "Region": "{{ env "AWS_REGION" }}",
-                    "Details": {
-                        "Other": {
-                            "Message": "{{ .Message }}",
-                            "Filename": "{{ $target }}",
-                            "StartLine": "{{ .CauseMetadata.StartLine }}",
-                            "EndLine": "{{ .CauseMetadata.EndLine }}"
-                        }
-                    }
-                }
-            ],
-            "RecordState": "ACTIVE"
-        }
-        {{- end -}}
-        {{- range .Secrets -}}
-            {{- if $t_first -}}{{- $t_first = false -}}{{- else -}},{{- end -}}
-            {{- $severity := .Severity -}}
-            {{- if eq $severity "UNKNOWN" -}}
-                {{- $severity = "INFORMATIONAL" -}}
-            {{- end -}}
-        {
-            "SchemaVersion": "2018-10-08",
-            "Id": "{{ $target }}",
-            "ProductArn": "arn:aws:securityhub:{{ env "AWS_DEFAULT_REGION" }}::product/khulnasoft-lab/khulnasoft-lab",
-            "GeneratorId": "Vul",
-            "AwsAccountId": "{{ env "AWS_ACCOUNT_ID" }}",
-            "Types": [ "Sensitive Data Identifications" ],
-            "CreatedAt": "{{ now | date "2006-01-02T15:04:05.999999999Z07:00" }}",
-            "UpdatedAt": "{{ now | date "2006-01-02T15:04:05.999999999Z07:00" }}",
-            "Severity": {
-                "Label": "{{ $severity }}"
-            },
-            "Title": "Vul found a secret in {{ $target }}: {{ .Title }}",
-            "Description": "Vul found a secret in {{ $target }}: {{ .Title }}",
-            "ProductFields": { "Product Name": "Vul" },
-            "Resources": [
-                {
-                    "Type": "Other",
-                    "Id": "{{ $target }}",
-                    "Partition": "aws",
-                    "Region": "{{ env "AWS_DEFAULT_REGION" }}",
-                    "Details": {
-                        "Other": {
-                            "Filename": "{{ $target }}"
-                        }
-                    }
-                }
-            ],
-            "RecordState": "ACTIVE"
-        }
-        {{- end -}}
-      {{- end }}
-    ]
-}
+            }
+        ],
+        "RecordState": "ACTIVE"
+    }
+   {{- end -}}
+  {{- end }}
+]

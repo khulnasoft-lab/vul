@@ -1,161 +1,153 @@
-package suse_test
+package suse
 
 import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	fake "k8s.io/utils/clock/testing"
-
-	"github.com/khulnasoft-lab/vul-db/pkg/db"
+	ftypes "github.com/aquasecurity/fanal/types"
 	dbTypes "github.com/khulnasoft-lab/vul-db/pkg/types"
-	"github.com/khulnasoft-lab/vul-db/pkg/vulnsrc/vulnerability"
-	"github.com/khulnasoft-lab/vul/pkg/dbtest"
-	"github.com/khulnasoft-lab/vul/pkg/detector/ospkg/suse"
-	ftypes "github.com/khulnasoft-lab/vul/pkg/fanal/types"
 	"github.com/khulnasoft-lab/vul/pkg/types"
+	"github.com/stretchr/testify/assert"
+
+	susecvrf "github.com/khulnasoft-lab/vul-db/pkg/vulnsrc/suse-cvrf"
+
+	"k8s.io/utils/clock"
+	clocktesting "k8s.io/utils/clock/testing"
 )
 
-func TestScanner_Detect(t *testing.T) {
-	type args struct {
-		osVer string
-		pkgs  []ftypes.Package
-	}
-	tests := []struct {
-		name         string
-		args         args
-		fixtures     []string
-		distribution suse.Type
-		want         []types.DetectedVulnerability
-		wantErr      string
-	}{
-		{
-			name: "happy path",
-			fixtures: []string{
-				"testdata/fixtures/suse.yaml",
-				"testdata/fixtures/data-source.yaml",
-			},
-			distribution: suse.OpenSUSE,
-			args: args{
-				osVer: "15.3",
-				pkgs: []ftypes.Package{
-					{
-						Name:       "postgresql",
-						Version:    "13",
-						Release:    "4.6.6",
-						SrcName:    "postgresql",
-						SrcVersion: "13",
-						SrcRelease: "4.6.6",
-						Layer: ftypes.Layer{
-							DiffID: "sha256:932da51564135c98a49a34a193d6cd363d8fa4184d957fde16c9d8527b3f3b02",
-						},
-					},
-				},
-			},
-			want: []types.DetectedVulnerability{
-				{
-					PkgName:          "postgresql",
-					VulnerabilityID:  "SUSE-SU-2021:0175-1",
-					InstalledVersion: "13-4.6.6",
-					FixedVersion:     "13-4.6.7",
-					Layer: ftypes.Layer{
-						DiffID: "sha256:932da51564135c98a49a34a193d6cd363d8fa4184d957fde16c9d8527b3f3b02",
-					},
-					DataSource: &dbTypes.DataSource{
-						ID:   vulnerability.SuseCVRF,
-						Name: "SUSE CVRF",
-						URL:  "https://ftp.suse.com/pub/projects/security/cvrf/",
-					},
-				},
-			},
-		},
-		{
-			name: "broken bucket",
-			fixtures: []string{
-				"testdata/fixtures/invalid.yaml",
-				"testdata/fixtures/data-source.yaml",
-			},
-			distribution: suse.SUSEEnterpriseLinux,
-			args: args{
-				osVer: "15.3",
-				pkgs: []ftypes.Package{
-					{
-						Name:       "jq",
-						Version:    "1.6-r0",
-						SrcName:    "jq",
-						SrcVersion: "1.6-r0",
-					},
-				},
-			},
-			wantErr: "failed to get SUSE advisories",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_ = dbtest.InitDB(t, tt.fixtures)
-			defer db.Close()
+type MockSuseConfig struct {
+	update func(string) error
+	get    func(string, string) ([]dbTypes.Advisory, error)
+}
 
-			s := suse.NewScanner(tt.distribution)
-			got, err := s.Detect(tt.args.osVer, nil, tt.args.pkgs)
-			if tt.wantErr != "" {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.wantErr)
-				return
-			}
-			assert.NoError(t, err)
-			assert.Equal(t, tt.want, got)
-		})
+func (msc MockSuseConfig) Update(a string) error {
+	if msc.update != nil {
+		return msc.update(a)
 	}
+	return nil
+}
+
+func (msc MockSuseConfig) Get(a string, b string) ([]dbTypes.Advisory, error) {
+	if msc.get != nil {
+		return msc.get(a, b)
+	}
+	return []dbTypes.Advisory{}, nil
 }
 
 func TestScanner_IsSupportedVersion(t *testing.T) {
-	type args struct {
-		osFamily ftypes.OSType
-		osVer    string
-	}
-	tests := []struct {
-		name         string
-		now          time.Time
-		distribution suse.Type
-		args         args
-		want         bool
+	vectors := map[string]struct {
+		clock        clock.Clock
+		osFamily     string
+		osVersion    string
+		distribution susecvrf.Distribution
+		expected     bool
 	}{
-		{
-			name: "opensuse.leap42.3",
-			now:  time.Date(2019, 5, 31, 23, 59, 59, 0, time.UTC),
-			args: args{
-				osFamily: "opensuse.leap",
-				osVer:    "42.3",
-			},
-			distribution: suse.OpenSUSE,
-			want:         true,
+		"opensuse.leap42.3": {
+			clock:        clocktesting.NewFakeClock(time.Date(2019, 5, 31, 23, 59, 59, 0, time.UTC)),
+			osFamily:     "opensuse.leap",
+			osVersion:    "42.3",
+			distribution: susecvrf.OpenSUSE,
+			expected:     true,
 		},
-		{
-			name: "sles12.3",
-			now:  time.Date(2019, 5, 31, 23, 59, 59, 0, time.UTC),
-			args: args{
-				osFamily: "suse linux enterprise server",
-				osVer:    "12.3",
-			},
-			distribution: suse.SUSEEnterpriseLinux,
-			want:         false,
+		"opensuse.leap15": {
+			clock:        clocktesting.NewFakeClock(time.Date(2019, 5, 31, 23, 59, 59, 0, time.UTC)),
+			osFamily:     "opensuse.leap",
+			osVersion:    "15.0",
+			distribution: susecvrf.OpenSUSE,
+			expected:     true,
 		},
-		{
-			name: "latest",
-			now:  time.Date(2019, 5, 2, 23, 59, 59, 0, time.UTC),
-			args: args{
-				osFamily: "opensuse.leap",
-				osVer:    "999.0",
-			},
-			want: true,
+		"opensuse.leap15.1": {
+			clock:        clocktesting.NewFakeClock(time.Date(2019, 5, 31, 23, 59, 59, 0, time.UTC)),
+			osFamily:     "opensuse.leap",
+			osVersion:    "15.1",
+			distribution: susecvrf.OpenSUSE,
+			expected:     true,
+		},
+		"opensuse.leap15.1-sametime": {
+			clock:        clocktesting.NewFakeClock(time.Date(2020, 11, 30, 23, 59, 59, 0, time.UTC)),
+			osFamily:     "opensuse.leap",
+			osVersion:    "15.1",
+			distribution: susecvrf.OpenSUSE,
+			expected:     false,
+		},
+		"sles12.3": {
+			clock:        clocktesting.NewFakeClock(time.Date(2019, 5, 31, 23, 59, 59, 0, time.UTC)),
+			osFamily:     "suse linux enterprise server",
+			osVersion:    "12.3",
+			distribution: susecvrf.SUSEEnterpriseLinux,
+			expected:     false,
+		},
+		"sles15": {
+			clock:        clocktesting.NewFakeClock(time.Date(2019, 5, 31, 23, 59, 59, 0, time.UTC)),
+			osFamily:     "suse linux enterprise server",
+			osVersion:    "15",
+			distribution: susecvrf.SUSEEnterpriseLinux,
+			expected:     true,
+		},
+		"unknown": {
+			clock:        clocktesting.NewFakeClock(time.Date(2019, 5, 31, 23, 59, 59, 0, time.UTC)),
+			osFamily:     "oracle",
+			osVersion:    "unknown",
+			distribution: susecvrf.SUSEEnterpriseLinux,
+			expected:     false,
 		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			s := suse.NewScanner(tt.distribution, suse.WithClock(fake.NewFakeClock(tt.now)))
-			got := s.IsSupportedVersion(tt.args.osFamily, tt.args.osVer)
-			assert.Equal(t, tt.want, got)
+
+	for testName, v := range vectors {
+		s := &Scanner{
+			vs:    susecvrf.NewVulnSrc(v.distribution),
+			clock: v.clock,
+		}
+		t.Run(testName, func(t *testing.T) {
+			actual := s.IsSupportedVersion(v.osFamily, v.osVersion)
+			if actual != v.expected {
+				t.Errorf("[%s] got %v, want %v", testName, actual, v.expected)
+			}
 		})
 	}
+
+}
+
+func TestScanner_Detect(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		s := &Scanner{
+			vs: MockSuseConfig{
+				get: func(s string, s2 string) (advisories []dbTypes.Advisory, err error) {
+					return []dbTypes.Advisory{
+						{
+							VulnerabilityID: "suse-123",
+							FixedVersion:    "3.0.0",
+						},
+					}, nil
+				},
+			},
+		}
+
+		vuls, err := s.Detect("3.1.0", []ftypes.Package{
+			{
+				Name:       "testpkg",
+				Version:    "2.1.0",
+				Release:    "hotfix",
+				SrcRelease: "test-hotfix",
+				SrcVersion: "2.1.0",
+				Layer: ftypes.Layer{
+					DiffID: "sha256:932da51564135c98a49a34a193d6cd363d8fa4184d957fde16c9d8527b3f3b02",
+				},
+			},
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, []types.DetectedVulnerability{
+			{
+				VulnerabilityID:  "suse-123",
+				PkgName:          "testpkg",
+				InstalledVersion: "2.1.0-hotfix",
+				FixedVersion:     "3.0.0",
+				Layer: ftypes.Layer{
+					DiffID: "sha256:932da51564135c98a49a34a193d6cd363d8fa4184d957fde16c9d8527b3f3b02",
+				},
+			},
+		}, vuls)
+	})
+
+	// TODO: Add unhappy paths
 }

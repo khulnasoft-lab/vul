@@ -1,17 +1,14 @@
-//go:build integration
 // +build integration
 
 package integration
 
 import (
-	"bytes"
-	"compress/gzip"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
-	"io"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -19,18 +16,20 @@ import (
 	"testing"
 
 	"github.com/docker/go-connections/nat"
-	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
-	"github.com/google/go-containerregistry/pkg/v1/remote"
-	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	testcontainers "github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
+
+	_ "github.com/aquasecurity/fanal/analyzer"
+	testdocker "github.com/khulnasoft-lab/vul/integration/docker"
+	"github.com/khulnasoft-lab/vul/pkg/commands"
+	"github.com/khulnasoft-lab/vul/pkg/report"
 )
 
 const (
-	registryImage = "registry:2.7.0"
+	registryImage = "registry:2"
 	registryPort  = "5443/tcp"
 
 	authImage    = "cesanta/docker_auth:1"
@@ -53,13 +52,10 @@ func setupRegistry(ctx context.Context, baseDir string, authURL *url.URL) (testc
 			"REGISTRY_AUTH_TOKEN_SERVICE":        "registry.docker.io",
 			"REGISTRY_AUTH_TOKEN_ISSUER":         "Vul auth server",
 			"REGISTRY_AUTH_TOKEN_ROOTCERTBUNDLE": "/certs/cert.pem",
-			"REGISTRY_AUTH_TOKEN_AUTOREDIRECT":   "false",
 		},
-		Mounts: testcontainers.Mounts(
-			testcontainers.BindMount(filepath.Join(baseDir, "data", "certs"), "/certs"),
-		),
-		SkipReaper: true,
-		AutoRemove: true,
+		BindMounts: map[string]string{
+			filepath.Join(baseDir, "data", "certs"): "/certs",
+		},
 		WaitingFor: wait.ForLog("listening on [::]:5443"),
 	}
 
@@ -75,13 +71,11 @@ func setupAuthServer(ctx context.Context, baseDir string) (testcontainers.Contai
 		Name:         "docker_auth",
 		Image:        authImage,
 		ExposedPorts: []string{authPort},
-		Mounts: testcontainers.Mounts(
-			testcontainers.BindMount(filepath.Join(baseDir, "data", "auth_config"), "/config"),
-			testcontainers.BindMount(filepath.Join(baseDir, "data", "certs"), "/certs"),
-		),
-		SkipReaper: true,
-		AutoRemove: true,
-		Cmd:        []string{"/config/config.yml"},
+		BindMounts: map[string]string{
+			filepath.Join(baseDir, "data", "auth_config"): "/config",
+			filepath.Join(baseDir, "data", "certs"):       "/certs",
+		},
+		Cmd: []string{"/config/config.yml"},
 	}
 
 	authC, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
@@ -135,12 +129,13 @@ func TestRegistry(t *testing.T) {
 	registryURL, err := getURL(ctx, registryC, registryPort)
 	require.NoError(t, err)
 
-	auth := &authn.Basic{
+	config := testdocker.RegistryConfig{
+		URL:      registryURL,
 		Username: authUsername,
 		Password: authPassword,
 	}
 
-	tests := []struct {
+	testCases := []struct {
 		name      string
 		imageName string
 		imageFile string
@@ -151,7 +146,7 @@ func TestRegistry(t *testing.T) {
 		{
 			name:      "happy path with username/password",
 			imageName: "alpine:3.10",
-			imageFile: "testdata/fixtures/images/alpine-310.tar.gz",
+			imageFile: "testdata/fixtures/alpine-310.tar.gz",
 			option: registryOption{
 				AuthURL:  authURL,
 				Username: authUsername,
@@ -162,7 +157,7 @@ func TestRegistry(t *testing.T) {
 		{
 			name:      "happy path with registry token",
 			imageName: "alpine:3.10",
-			imageFile: "testdata/fixtures/images/alpine-310.tar.gz",
+			imageFile: "testdata/fixtures/alpine-310.tar.gz",
 			option: registryOption{
 				AuthURL:       authURL,
 				Username:      authUsername,
@@ -174,77 +169,107 @@ func TestRegistry(t *testing.T) {
 		{
 			name:      "sad path",
 			imageName: "alpine:3.10",
-			imageFile: "testdata/fixtures/images/alpine-310.tar.gz",
-			wantErr:   "unexpected status code 401 Unauthorized: Auth failed",
+			imageFile: "testdata/fixtures/alpine-310.tar.gz",
+			wantErr:   "unsupported status code 401; body: Auth failed",
 		},
 	}
 
-	for _, tc := range tests {
+	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			d, err := testdocker.New()
+			require.NoError(t, err)
+
 			s := fmt.Sprintf("%s/%s", registryURL.Host, tc.imageName)
 			imageRef, err := name.ParseReference(s)
 			require.NoError(t, err)
 
 			// 1. Load a test image from the tar file, tag it and push to the test registry.
-			err = replicateImage(imageRef, tc.imageFile, auth)
+			err = d.ReplicateImage(ctx, tc.imageName, tc.imageFile, config)
 			require.NoError(t, err)
 
 			// 2. Scan it
-			resultFile, err := scan(t, imageRef, baseDir, tc.golden, tc.option)
+			resultFile, cleanup, err := scan(imageRef, baseDir, tc.golden, tc.option)
 
 			if tc.wantErr != "" {
-				require.Error(t, err)
+				require.NotNil(t, err)
 				require.Contains(t, err.Error(), tc.wantErr, err)
 				return
+			} else {
+				require.NoError(t, err)
 			}
+			defer cleanup()
+
+			// 3. Compare want and got
+			golden, err := os.Open(tc.golden)
+			assert.NoError(t, err)
+
+			var want report.Results
+			err = json.NewDecoder(golden).Decode(&want)
 			require.NoError(t, err)
 
-			// 3. Read want and got
-			want := readReport(t, tc.golden)
-			got := readReport(t, resultFile)
+			result, err := os.Open(resultFile)
+			assert.NoError(t, err)
 
-			// 4 Update some dynamic fields
-			want.ArtifactName = s
-			for i := range want.Results {
-				want.Results[i].Target = fmt.Sprintf("%s (alpine 3.10.2)", s)
-			}
+			var got report.Results
+			err = json.NewDecoder(result).Decode(&got)
+			require.NoError(t, err)
 
-			// 5. Compare want and got
-			assert.Equal(t, want, got)
+			assert.Equal(t, want[0].Vulnerabilities, got[0].Vulnerabilities)
+			assert.Equal(t, want[0].Vulnerabilities, got[0].Vulnerabilities)
 		})
 	}
 }
 
-func scan(t *testing.T, imageRef name.Reference, baseDir, goldenFile string, opt registryOption) (string, error) {
-	// Set up testing DB
-	cacheDir := initDB(t)
+func scan(imageRef name.Reference, baseDir, goldenFile string, opt registryOption) (string, func(), error) {
+	cleanup := func() {}
 
-	// Set a temp dir so that modules will not be loaded
-	t.Setenv("XDG_DATA_HOME", cacheDir)
+	// Copy DB file
+	cacheDir, err := gunzipDB()
+	if err != nil {
+		return "", cleanup, err
+	}
+	defer os.RemoveAll(cacheDir)
 
 	// Setup the output file
-	outputFile := filepath.Join(t.TempDir(), "output.json")
-	if *update {
+	var outputFile string
+	if *update && goldenFile != "" {
 		outputFile = goldenFile
+	} else {
+		output, err := ioutil.TempFile("", "integration")
+		if err != nil {
+			return "", cleanup, err
+		}
+		defer output.Close()
+
+		outputFile = output.Name()
+		cleanup = func() {
+			os.Remove(outputFile)
+		}
 	}
 
 	// Setup env
-	if err := setupEnv(t, imageRef, baseDir, opt); err != nil {
-		return "", err
+	if err = setupEnv(imageRef, baseDir, opt); err != nil {
+		return "", cleanup, err
 	}
+	defer unsetEnv()
 
-	osArgs := []string{"-q", "--cache-dir", cacheDir, "image", "--format", "json", "--skip-update",
-		"--output", outputFile, imageRef.Name()}
+	// Setup CLI App
+	app := commands.NewApp("dev")
+	app.Writer = ioutil.Discard
+
+	osArgs := []string{"vul", "--cache-dir", cacheDir, "--format", "json", "--skip-update", "--output", outputFile, imageRef.Name()}
 
 	// Run Vul
-	if err := execute(osArgs); err != nil {
-		return "", err
+	if err = app.Run(osArgs); err != nil {
+		return "", cleanup, err
 	}
-	return outputFile, nil
+	return outputFile, cleanup, nil
 }
 
-func setupEnv(t *testing.T, imageRef name.Reference, baseDir string, opt registryOption) error {
-	t.Setenv("VUL_INSECURE", "true")
+func setupEnv(imageRef name.Reference, baseDir string, opt registryOption) error {
+	if err := os.Setenv("VUL_INSECURE", "true"); err != nil {
+		return err
+	}
 
 	if opt.Username != "" && opt.Password != "" {
 		if opt.RegistryToken {
@@ -253,10 +278,26 @@ func setupEnv(t *testing.T, imageRef name.Reference, baseDir string, opt registr
 			if err != nil {
 				return err
 			}
-			t.Setenv("VUL_REGISTRY_TOKEN", token)
+			if err := os.Setenv("VUL_REGISTRY_TOKEN", token); err != nil {
+				return err
+			}
 		} else {
-			t.Setenv("VUL_USERNAME", opt.Username)
-			t.Setenv("VUL_PASSWORD", opt.Password)
+			if err := os.Setenv("VUL_USERNAME", opt.Username); err != nil {
+				return err
+			}
+			if err := os.Setenv("VUL_PASSWORD", opt.Password); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func unsetEnv() error {
+	envs := []string{"VUL_INSECURE", "VUL_USERNAME", "VUL_PASSWORD", "VUL_REGISTRY_TOKEN"}
+	for _, e := range envs {
+		if err := os.Unsetenv(e); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -264,7 +305,7 @@ func setupEnv(t *testing.T, imageRef name.Reference, baseDir string, opt registr
 
 func requestRegistryToken(imageRef name.Reference, baseDir string, opt registryOption) (string, error) {
 	// Create a CA certificate pool and add cert.pem to it
-	caCert, err := os.ReadFile(filepath.Join(baseDir, "data", "certs", "cert.pem"))
+	caCert, err := ioutil.ReadFile(filepath.Join(baseDir, "data", "certs", "cert.pem"))
 	if err != nil {
 		return "", err
 	}
@@ -309,33 +350,4 @@ func requestRegistryToken(imageRef name.Reference, baseDir string, opt registryO
 	}
 
 	return r.AccessToken, nil
-}
-
-// ReplicateImage tags the given imagePath and pushes it to the given dest registry.
-func replicateImage(imageRef name.Reference, imagePath string, auth authn.Authenticator) error {
-	img, err := tarball.Image(func() (io.ReadCloser, error) {
-		b, err := os.ReadFile(imagePath)
-		if err != nil {
-			return nil, err
-		}
-		gr, err := gzip.NewReader(bytes.NewReader(b))
-		if err != nil {
-			return nil, err
-		}
-		return io.NopCloser(gr), nil
-	}, nil)
-	if err != nil {
-		return err
-	}
-
-	t := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}
-
-	err = remote.Write(imageRef, img, remote.WithAuth(auth), remote.WithTransport(t))
-	if err != nil {
-		return err
-	}
-
-	return nil
 }

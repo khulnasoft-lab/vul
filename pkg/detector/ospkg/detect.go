@@ -3,23 +3,19 @@ package ospkg
 import (
 	"time"
 
-	"github.com/samber/lo"
+	"github.com/google/wire"
 	"golang.org/x/xerrors"
 
-	"github.com/khulnasoft-lab/vul/pkg/detector/ospkg/alma"
+	fos "github.com/aquasecurity/fanal/analyzer/os"
+	ftypes "github.com/aquasecurity/fanal/types"
 	"github.com/khulnasoft-lab/vul/pkg/detector/ospkg/alpine"
 	"github.com/khulnasoft-lab/vul/pkg/detector/ospkg/amazon"
-	"github.com/khulnasoft-lab/vul/pkg/detector/ospkg/chainguard"
 	"github.com/khulnasoft-lab/vul/pkg/detector/ospkg/debian"
-	"github.com/khulnasoft-lab/vul/pkg/detector/ospkg/mariner"
 	"github.com/khulnasoft-lab/vul/pkg/detector/ospkg/oracle"
 	"github.com/khulnasoft-lab/vul/pkg/detector/ospkg/photon"
 	"github.com/khulnasoft-lab/vul/pkg/detector/ospkg/redhat"
-	"github.com/khulnasoft-lab/vul/pkg/detector/ospkg/rocky"
 	"github.com/khulnasoft-lab/vul/pkg/detector/ospkg/suse"
 	"github.com/khulnasoft-lab/vul/pkg/detector/ospkg/ubuntu"
-	"github.com/khulnasoft-lab/vul/pkg/detector/ospkg/wolfi"
-	ftypes "github.com/khulnasoft-lab/vul/pkg/fanal/types"
 	"github.com/khulnasoft-lab/vul/pkg/log"
 	"github.com/khulnasoft-lab/vul/pkg/types"
 )
@@ -28,51 +24,37 @@ var (
 	// ErrUnsupportedOS defines error for unsupported OS
 	ErrUnsupportedOS = xerrors.New("unsupported os")
 
-	drivers = map[ftypes.OSType]Driver{
-		ftypes.Alpine:       alpine.NewScanner(),
-		ftypes.Alma:         alma.NewScanner(),
-		ftypes.Amazon:       amazon.NewScanner(),
-		ftypes.CBLMariner:   mariner.NewScanner(),
-		ftypes.Debian:       debian.NewScanner(),
-		ftypes.Ubuntu:       ubuntu.NewScanner(),
-		ftypes.RedHat:       redhat.NewScanner(),
-		ftypes.CentOS:       redhat.NewScanner(),
-		ftypes.Rocky:        rocky.NewScanner(),
-		ftypes.Oracle:       oracle.NewScanner(),
-		ftypes.OpenSUSELeap: suse.NewScanner(suse.OpenSUSE),
-		ftypes.SLES:         suse.NewScanner(suse.SUSEEnterpriseLinux),
-		ftypes.Photon:       photon.NewScanner(),
-		ftypes.Wolfi:        wolfi.NewScanner(),
-		ftypes.Chainguard:   chainguard.NewScanner(),
-	}
+	// SuperSet binds dependencies for OS scan
+	SuperSet = wire.NewSet(
+		wire.Struct(new(Detector)),
+		wire.Bind(new(Operation), new(Detector)),
+	)
 )
 
-// RegisterDriver is defined for extensibility and not supposed to be used in Vul.
-func RegisterDriver(name ftypes.OSType, driver Driver) {
-	drivers[name] = driver
+// Operation defines operation of OSpkg scan
+type Operation interface {
+	Detect(string, string, string, time.Time, []ftypes.Package) ([]types.DetectedVulnerability, bool, error)
 }
 
 // Driver defines operations for OS package scan
 type Driver interface {
-	Detect(string, *ftypes.Repository, []ftypes.Package) ([]types.DetectedVulnerability, error)
-	IsSupportedVersion(ftypes.OSType, string) bool
+	Detect(string, []ftypes.Package) ([]types.DetectedVulnerability, error)
+	IsSupportedVersion(string, string) bool
 }
 
+// Detector implements Operation
+type Detector struct{}
+
 // Detect detects the vulnerabilities
-func Detect(_, osFamily ftypes.OSType, osName string, repo *ftypes.Repository, _ time.Time, pkgs []ftypes.Package) ([]types.DetectedVulnerability, bool, error) {
-	driver, err := newDriver(osFamily)
-	if err != nil {
+func (d Detector) Detect(_, osFamily, osName string, _ time.Time, pkgs []ftypes.Package) ([]types.DetectedVulnerability, bool, error) {
+	driver := newDriver(osFamily, osName)
+	if driver == nil {
 		return nil, false, ErrUnsupportedOS
 	}
 
 	eosl := !driver.IsSupportedVersion(osFamily, osName)
 
-	// Package `gpg-pubkey` doesn't use the correct version.
-	// We don't need to find vulnerabilities for this package.
-	filteredPkgs := lo.Filter(pkgs, func(pkg ftypes.Package, index int) bool {
-		return pkg.Name != "gpg-pubkey"
-	})
-	vulns, err := driver.Detect(osName, repo, filteredPkgs)
+	vulns, err := driver.Detect(osName, pkgs)
 	if err != nil {
 		return nil, false, xerrors.Errorf("failed detection: %w", err)
 	}
@@ -80,11 +62,31 @@ func Detect(_, osFamily ftypes.OSType, osName string, repo *ftypes.Repository, _
 	return vulns, eosl, nil
 }
 
-func newDriver(osFamily ftypes.OSType) (Driver, error) {
-	if driver, ok := drivers[osFamily]; ok {
-		return driver, nil
+// nolint: gocyclo
+// TODO: fix cyclometic complexity by removing default
+func newDriver(osFamily, osName string) Driver {
+	// TODO: use DI and change struct names
+	switch osFamily {
+	case fos.Alpine:
+		return alpine.NewScanner()
+	case fos.Debian:
+		return debian.NewScanner()
+	case fos.Ubuntu:
+		return ubuntu.NewScanner()
+	case fos.RedHat, fos.CentOS:
+		return redhat.NewScanner()
+	case fos.Amazon:
+		return amazon.NewScanner()
+	case fos.Oracle:
+		return oracle.NewScanner()
+	case fos.OpenSUSELeap:
+		return suse.NewScanner(suse.OpenSUSE)
+	case fos.SLES:
+		return suse.NewScanner(suse.SUSEEnterpriseLinux)
+	case fos.Photon:
+		return photon.NewScanner()
+	default:
+		log.Logger.Warnf("unsupported os : %s", osFamily)
+		return nil
 	}
-
-	log.Logger.Warnf("unsupported os : %s", osFamily)
-	return nil, ErrUnsupportedOS
 }

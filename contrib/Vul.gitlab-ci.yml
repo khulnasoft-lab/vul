@@ -10,7 +10,7 @@ Vul_container_scanning:
     IMAGE: "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA"
   allow_failure: true
   before_script:
-    - export VUL_VERSION=${VUL_VERSION:-v0.19.2}
+    - export VUL_VERSION=${VUL_VERSION:-v0.4.3}
     - apk add --no-cache curl docker-cli
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" $CI_REGISTRY
     - curl -sfL https://raw.githubusercontent.com/khulnasoft-lab/vul/main/contrib/install.sh | sh -s -- -b /usr/local/bin ${VUL_VERSION}

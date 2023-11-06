@@ -2,15 +2,13 @@ package log
 
 import (
 	"os"
-	"runtime"
 
-	xlog "github.com/masahiro331/go-xfs-filesystem/log"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"golang.org/x/xerrors"
 
-	dlog "github.com/khulnasoft-lab/go-dep-parser/pkg/log"
-	flog "github.com/khulnasoft-lab/vul/pkg/fanal/log"
+	flog "github.com/aquasecurity/fanal/log"
+	dlog "github.com/aquasecurity/go-dep-parser/pkg/log"
 )
 
 var (
@@ -38,9 +36,6 @@ func InitLogger(debug, disable bool) (err error) {
 	// Set logger for fanal
 	flog.SetLogger(Logger)
 
-	// Set logger for go-xfs-filesystem
-	xlog.SetLogger(Logger)
-
 	return nil
 
 }
@@ -59,12 +54,6 @@ func NewLogger(debug, disable bool) (*zap.SugaredLogger, error) {
 		return zapcore.DebugLevel < lvl && lvl < zapcore.ErrorLevel
 	})
 
-	encoderLevel := zapcore.CapitalColorLevelEncoder
-	// when running on Windows, don't log with color
-	if runtime.GOOS == "windows" {
-		encoderLevel = zapcore.CapitalLevelEncoder
-	}
-
 	encoderConfig := zapcore.EncoderConfig{
 		TimeKey:        "Time",
 		LevelKey:       "Level",
@@ -72,7 +61,7 @@ func NewLogger(debug, disable bool) (*zap.SugaredLogger, error) {
 		CallerKey:      "Caller",
 		MessageKey:     "Msg",
 		StacktraceKey:  "St",
-		EncodeLevel:    encoderLevel,
+		EncodeLevel:    zapcore.CapitalColorLevelEncoder,
 		EncodeTime:     zapcore.ISO8601TimeEncoder,
 		EncodeDuration: zapcore.StringDurationEncoder,
 		EncodeCaller:   zapcore.ShortCallerEncoder,
@@ -82,7 +71,7 @@ func NewLogger(debug, disable bool) (*zap.SugaredLogger, error) {
 
 	// High-priority output should also go to standard error, and low-priority
 	// output should also go to standard out.
-	consoleLogs := zapcore.Lock(os.Stderr)
+	consoleLogs := zapcore.Lock(os.Stdout)
 	consoleErrors := zapcore.Lock(os.Stderr)
 	if disable {
 		devNull, err := os.Create(os.DevNull)
@@ -113,11 +102,4 @@ func Fatal(err error) {
 		Logger.Fatalf("%+v", err)
 	}
 	Logger.Fatal(err)
-}
-
-func String(key, val string) zap.Field {
-	if key == "" || val == "" {
-		return zap.Skip()
-	}
-	return zap.String(key, val)
 }

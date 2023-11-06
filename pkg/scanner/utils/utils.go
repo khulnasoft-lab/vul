@@ -3,7 +3,7 @@ package utils
 import (
 	"fmt"
 
-	"github.com/khulnasoft-lab/vul/pkg/fanal/types"
+	"github.com/aquasecurity/fanal/types"
 )
 
 // FormatVersion formats the package version based on epoch, version & release

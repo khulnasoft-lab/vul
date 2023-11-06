@@ -1,594 +1,452 @@
-//go:build integration
+// +build integration
 
 package integration
 
 import (
+	"io/ioutil"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/khulnasoft-lab/vul/pkg/commands"
 )
 
-func TestTar(t *testing.T) {
+func TestRun_WithTar(t *testing.T) {
 	type args struct {
-		IgnoreUnfixed bool
-		Severity      []string
-		IgnoreIDs     []string
-		Format        string
-		Input         string
-		SkipDirs      []string
-		SkipFiles     []string
+		Version             string
+		WithImageSubcommand bool
+		SkipUpdate          bool
+		IgnoreUnfixed       bool
+		Severity            []string
+		IgnoreIDs           []string
+		Format              string
+		Input               string
+		SkipDirs            []string
+		SkipFiles           []string
 	}
-	tests := []struct {
+	cases := []struct {
 		name     string
 		testArgs args
 		golden   string
 	}{
 		{
-			name: "alpine 3.9",
+			name: "alpine 3.10 integration",
 			testArgs: args{
-				Format: "json",
-				Input:  "testdata/fixtures/images/alpine-39.tar.gz",
-			},
-			golden: "testdata/alpine-39.json.golden",
-		},
-		{
-			name: "alpine 3.9 with skip dirs",
-			testArgs: args{
-				Format: "json",
-				Input:  "testdata/fixtures/images/alpine-39.tar.gz",
-				SkipDirs: []string{
-					"/etc",
-				},
-			},
-			golden: "testdata/alpine-39-skip.json.golden",
-		},
-		{
-			name: "alpine 3.9 with skip files",
-			testArgs: args{
-				Format: "json",
-				Input:  "testdata/fixtures/images/alpine-39.tar.gz",
-				SkipFiles: []string{
-					"/etc",
-					"/etc/TZ",
-					"/etc/alpine-release",
-					"/etc/apk",
-					"/etc/apk/arch",
-					"/etc/apk/keys",
-					"/etc/apk/keys/alpine-devel@lists.alpinelinux.org-4a6a0840.rsa.pub",
-					"/etc/apk/keys/alpine-devel@lists.alpinelinux.org-5243ef4b.rsa.pub",
-					"/etc/apk/keys/alpine-devel@lists.alpinelinux.org-5261cecb.rsa.pub",
-					"/etc/apk/protected_paths.d",
-					"/etc/apk/repositories",
-					"/etc/apk/world",
-					"/etc/conf.d",
-					"/etc/crontabs",
-					"/etc/crontabs/root",
-					"/etc/fstab",
-					"/etc/group",
-					"/etc/hostname",
-					"/etc/hosts",
-					"/etc/init.d",
-					"/etc/inittab",
-					"/etc/issue",
-					"/etc/logrotate.d",
-					"/etc/logrotate.d/acpid",
-					"/etc/modprobe.d",
-					"/etc/modprobe.d/aliases.conf",
-					"/etc/modprobe.d/blacklist.conf",
-					"/etc/modprobe.d/i386.conf",
-					"/etc/modprobe.d/kms.conf",
-					"/etc/modules",
-					"/etc/modules-load.d",
-					"/etc/motd",
-					"/etc/mtab",
-					"/etc/network",
-					"/etc/network/if-down.d",
-					"/etc/network/if-post-down.d",
-					"/etc/network/if-post-up.d",
-					"/etc/network/if-pre-down.d",
-					"/etc/network/if-pre-up.d",
-					"/etc/network/if-up.d",
-					"/etc/network/if-up.d/dad",
-					"/etc/opt",
-					"/etc/os-release",
-					"/etc/passwd",
-					"/etc/periodic",
-					"/etc/periodic/15min",
-					"/etc/periodic/daily",
-					"/etc/periodic/hourly",
-					"/etc/periodic/monthly",
-					"/etc/periodic/weekly",
-					"/etc/profile",
-					"/etc/profile.d",
-					"/etc/profile.d/color_prompt",
-					"/etc/protocols",
-					"/etc/securetty",
-					"/etc/services",
-					"/etc/shadow",
-					"/etc/shells",
-					"/etc/ssl",
-					"/etc/ssl/cert.pem",
-					"/etc/ssl/certs",
-					"/etc/ssl/ct_log_list.cnf",
-					"/etc/ssl/ct_log_list.cnf.dist",
-					"/etc/ssl/misc",
-					"/etc/ssl/misc/CA.pl",
-					"/etc/ssl/misc/tsget",
-					"/etc/ssl/misc/tsget.pl",
-					"/etc/ssl/openssl.cnf",
-					"/etc/ssl/openssl.cnf.dist",
-					"/etc/ssl/private",
-					"/etc/sysctl.conf",
-					"/etc/sysctl.d",
-					"/etc/sysctl.d/00-alpine.conf",
-					"/etc/udhcpd.conf",
-				},
-			},
-			golden: "testdata/alpine-39-skip.json.golden",
-		},
-		{
-			name: "alpine 3.9 with high and critical severity",
-			testArgs: args{
-				IgnoreUnfixed: true,
-				Severity: []string{
-					"HIGH",
-					"CRITICAL",
-				},
-				Format: "json",
-				Input:  "testdata/fixtures/images/alpine-39.tar.gz",
-			},
-			golden: "testdata/alpine-39-high-critical.json.golden",
-		},
-		{
-			name: "alpine 3.9 with .vulignore",
-			testArgs: args{
-				IgnoreUnfixed: false,
-				IgnoreIDs: []string{
-					"CVE-2019-1549",
-					"CVE-2019-14697",
-				},
-				Format: "json",
-				Input:  "testdata/fixtures/images/alpine-39.tar.gz",
-			},
-			golden: "testdata/alpine-39-ignore-cveids.json.golden",
-		},
-		{
-			name: "alpine 3.10",
-			testArgs: args{
-				Format: "json",
-				Input:  "testdata/fixtures/images/alpine-310.tar.gz",
+				Version:    "dev",
+				SkipUpdate: true,
+				Format:     "json",
+				Input:      "testdata/fixtures/alpine-310.tar.gz",
 			},
 			golden: "testdata/alpine-310.json.golden",
 		},
 		{
-			name: "alpine distroless",
+			name: "alpine 3.10 integration with image subcommand",
 			testArgs: args{
-				Format: "json",
-				Input:  "testdata/fixtures/images/alpine-distroless.tar.gz",
+				Version:             "dev",
+				WithImageSubcommand: true,
+				SkipUpdate:          true,
+				Format:              "json",
+				Input:               "testdata/fixtures/alpine-310.tar.gz",
 			},
-			golden: "testdata/alpine-distroless.json.golden",
+			golden: "testdata/alpine-310.json.golden",
 		},
 		{
-			name: "amazon linux 1",
+			name: "alpine 3.10 integration with --ignore-unfixed option",
 			testArgs: args{
-				Format: "json",
-				Input:  "testdata/fixtures/images/amazon-1.tar.gz",
+				Version:       "dev",
+				SkipUpdate:    true,
+				IgnoreUnfixed: true,
+				Format:        "json",
+				Input:         "testdata/fixtures/alpine-310.tar.gz",
 			},
-			golden: "testdata/amazon-1.json.golden",
+			golden: "testdata/alpine-310-ignore-unfixed.json.golden",
 		},
 		{
-			name: "amazon linux 2",
+			name: "alpine 3.10 integration with medium and high severity",
 			testArgs: args{
-				Format: "json",
-				Input:  "testdata/fixtures/images/amazon-2.tar.gz",
+				Version:       "dev",
+				SkipUpdate:    true,
+				IgnoreUnfixed: true,
+				Severity:      []string{"MEDIUM", "HIGH"},
+				Format:        "json",
+				Input:         "testdata/fixtures/alpine-310.tar.gz",
 			},
-			golden: "testdata/amazon-2.json.golden",
+			golden: "testdata/alpine-310-medium-high.json.golden",
 		},
 		{
-			name: "debian buster/10",
+			name: "alpine 3.10 integration with .vulignore",
 			testArgs: args{
-				Format: "json",
-				Input:  "testdata/fixtures/images/debian-buster.tar.gz",
+				Version:       "dev",
+				SkipUpdate:    true,
+				IgnoreUnfixed: false,
+				IgnoreIDs:     []string{"CVE-2019-1549", "CVE-2019-1563"},
+				Format:        "json",
+				Input:         "testdata/fixtures/alpine-310.tar.gz",
+			},
+			golden: "testdata/alpine-310-ignore-cveids.json.golden",
+		},
+		{
+			name: "alpine 3.9 integration",
+			testArgs: args{
+				Version:    "dev",
+				SkipUpdate: true,
+				Format:     "json",
+				Input:      "testdata/fixtures/alpine-39.tar.gz",
+			},
+			golden: "testdata/alpine-39.json.golden",
+		},
+		{
+			name: "debian buster integration",
+			testArgs: args{
+				Version:    "dev",
+				SkipUpdate: true,
+				Format:     "json",
+				Input:      "testdata/fixtures/debian-buster.tar.gz",
 			},
 			golden: "testdata/debian-buster.json.golden",
 		},
 		{
-			name: "debian buster/10 with --ignore-unfixed option",
+			name: "debian buster integration with --ignore-unfixed option",
 			testArgs: args{
+				Version:       "dev",
+				SkipUpdate:    true,
 				IgnoreUnfixed: true,
 				Format:        "json",
-				Input:         "testdata/fixtures/images/debian-buster.tar.gz",
+				Input:         "testdata/fixtures/debian-buster.tar.gz",
 			},
 			golden: "testdata/debian-buster-ignore-unfixed.json.golden",
 		},
 		{
-			name: "debian stretch/9",
+			name: "debian stretch integration",
 			testArgs: args{
-				Format: "json",
-				Input:  "testdata/fixtures/images/debian-stretch.tar.gz",
+				Version:    "dev",
+				SkipUpdate: true,
+				Format:     "json",
+				Input:      "testdata/fixtures/debian-stretch.tar.gz",
 			},
 			golden: "testdata/debian-stretch.json.golden",
 		},
 		{
-			name: "ubuntu 18.04",
+			name: "ubuntu 18.04 integration",
 			testArgs: args{
-				Format: "json",
-				Input:  "testdata/fixtures/images/ubuntu-1804.tar.gz",
+				Version:    "dev",
+				SkipUpdate: true,
+				Format:     "json",
+				Input:      "testdata/fixtures/ubuntu-1804.tar.gz",
 			},
 			golden: "testdata/ubuntu-1804.json.golden",
 		},
 		{
-			name: "ubuntu 18.04 with --ignore-unfixed option",
+			name: "ubuntu 18.04 integration with --ignore-unfixed option",
 			testArgs: args{
+				Version:       "dev",
+				SkipUpdate:    true,
 				IgnoreUnfixed: true,
 				Format:        "json",
-				Input:         "testdata/fixtures/images/ubuntu-1804.tar.gz",
+				Input:         "testdata/fixtures/ubuntu-1804.tar.gz",
 			},
 			golden: "testdata/ubuntu-1804-ignore-unfixed.json.golden",
 		},
 		{
-			name: "centos 7",
+			name: "ubuntu 16.04 integration",
 			testArgs: args{
-				Format: "json",
-				Input:  "testdata/fixtures/images/centos-7.tar.gz",
+				Version:    "dev",
+				SkipUpdate: true,
+				Format:     "json",
+				Input:      "testdata/fixtures/ubuntu-1604.tar.gz",
+			},
+			golden: "testdata/ubuntu-1604.json.golden",
+		},
+		{
+			name: "centos 7 integration",
+			testArgs: args{
+				Version:    "dev",
+				SkipUpdate: true,
+				Format:     "json",
+				Input:      "testdata/fixtures/centos-7.tar.gz",
 			},
 			golden: "testdata/centos-7.json.golden",
 		},
 		{
-			name: "centos 7with --ignore-unfixed option",
+			name: "centos 7 integration with --ignore-unfixed option",
 			testArgs: args{
+				Version:       "dev",
+				SkipUpdate:    true,
 				IgnoreUnfixed: true,
 				Format:        "json",
-				Input:         "testdata/fixtures/images/centos-7.tar.gz",
+				Input:         "testdata/fixtures/centos-7.tar.gz",
 			},
 			golden: "testdata/centos-7-ignore-unfixed.json.golden",
 		},
 		{
-			name: "centos 7 with medium severity",
+			name: "centos 7 integration with low and high severity",
 			testArgs: args{
+				Version:       "dev",
+				SkipUpdate:    true,
 				IgnoreUnfixed: true,
-				Severity:      []string{"MEDIUM"},
+				Severity:      []string{"LOW", "HIGH"},
 				Format:        "json",
-				Input:         "testdata/fixtures/images/centos-7.tar.gz",
+				Input:         "testdata/fixtures/centos-7.tar.gz",
 			},
-			golden: "testdata/centos-7-medium.json.golden",
+			golden: "testdata/centos-7-low-high.json.golden",
 		},
 		{
-			name: "centos 6",
+			name: "centos 6 integration",
 			testArgs: args{
-				Format: "json",
-				Input:  "testdata/fixtures/images/centos-6.tar.gz",
+				Version:    "dev",
+				SkipUpdate: true,
+				Format:     "json",
+				Input:      "testdata/fixtures/centos-6.tar.gz",
 			},
 			golden: "testdata/centos-6.json.golden",
 		},
 		{
-			name: "ubi 7",
+			name: "ubi 7 integration",
 			testArgs: args{
-				Format: "json",
-				Input:  "testdata/fixtures/images/ubi-7.tar.gz",
+				Version:    "dev",
+				SkipUpdate: true,
+				Format:     "json",
+				Input:      "testdata/fixtures/ubi-7.tar.gz",
 			},
 			golden: "testdata/ubi-7.json.golden",
 		},
 		{
-			name: "almalinux 8",
+			name: "distroless base integration",
 			testArgs: args{
-				Format: "json",
-				Input:  "testdata/fixtures/images/almalinux-8.tar.gz",
-			},
-			golden: "testdata/almalinux-8.json.golden",
-		},
-		{
-			name: "rocky linux 8",
-			testArgs: args{
-				Format: "json",
-				Input:  "testdata/fixtures/images/rockylinux-8.tar.gz",
-			},
-			golden: "testdata/rockylinux-8.json.golden",
-		},
-		{
-			name: "distroless base",
-			testArgs: args{
-				Format: "json",
-				Input:  "testdata/fixtures/images/distroless-base.tar.gz",
+				Version:    "dev",
+				SkipUpdate: true,
+				Format:     "json",
+				Input:      "testdata/fixtures/distroless-base.tar.gz",
 			},
 			golden: "testdata/distroless-base.json.golden",
 		},
 		{
-			name: "distroless python27",
+			name: "distroless base integration with --ignore-unfixed option",
 			testArgs: args{
-				Format: "json",
-				Input:  "testdata/fixtures/images/distroless-python27.tar.gz",
+				Version:       "dev",
+				SkipUpdate:    true,
+				IgnoreUnfixed: true,
+				Format:        "json",
+				Input:         "testdata/fixtures/distroless-base.tar.gz",
+			},
+			golden: "testdata/distroless-base-ignore-unfixed.json.golden",
+		},
+		{
+			name: "distroless python27 integration",
+			testArgs: args{
+				Version:    "dev",
+				SkipUpdate: true,
+				Format:     "json",
+				Input:      "testdata/fixtures/distroless-python27.tar.gz",
 			},
 			golden: "testdata/distroless-python27.json.golden",
 		},
 		{
-			name: "oracle linux 8",
+			name: "amazon 1 integration",
 			testArgs: args{
-				Format: "json",
-				Input:  "testdata/fixtures/images/oraclelinux-8.tar.gz",
+				Version:    "dev",
+				SkipUpdate: true,
+				Format:     "json",
+				Input:      "testdata/fixtures/amazon-1.tar.gz",
 			},
-			golden: "testdata/oraclelinux-8.json.golden",
+			golden: "testdata/amazon-1.json.golden",
 		},
 		{
-			name: "opensuse leap 15.1",
+			name: "amazon 2 integration",
 			testArgs: args{
-				Format: "json",
-				Input:  "testdata/fixtures/images/opensuse-leap-151.tar.gz",
+				Version:    "dev",
+				SkipUpdate: true,
+				Format:     "json",
+				Input:      "testdata/fixtures/amazon-2.tar.gz",
+			},
+			golden: "testdata/amazon-2.json.golden",
+		},
+		{
+			name: "oracle 6 integration",
+			testArgs: args{
+				Version:    "dev",
+				SkipUpdate: true,
+				Format:     "json",
+				Input:      "testdata/fixtures/oraclelinux-6-slim.tar.gz",
+			},
+			golden: "testdata/oraclelinux-6-slim.json.golden",
+		},
+		{
+			name: "oracle 7 integration",
+			testArgs: args{
+				Version:    "dev",
+				SkipUpdate: true,
+				Format:     "json",
+				Input:      "testdata/fixtures/oraclelinux-7-slim.tar.gz",
+			},
+			golden: "testdata/oraclelinux-7-slim.json.golden",
+		},
+		{
+			name: "oracle 8 integration",
+			testArgs: args{
+				Version:    "dev",
+				SkipUpdate: true,
+				Format:     "json",
+				Input:      "testdata/fixtures/oraclelinux-8-slim.tar.gz",
+			},
+			golden: "testdata/oraclelinux-8-slim.json.golden",
+		},
+		{
+			name: "opensuse leap 15.1 integration",
+			testArgs: args{
+				Version:    "dev",
+				SkipUpdate: true,
+				Format:     "json",
+				Input:      "testdata/fixtures/opensuse-leap-151.tar.gz",
 			},
 			golden: "testdata/opensuse-leap-151.json.golden",
 		},
 		{
-			name: "photon 3.0",
+			name: "opensuse leap 42.3 integration",
 			testArgs: args{
-				Format: "json",
-				Input:  "testdata/fixtures/images/photon-30.tar.gz",
+				Version:    "dev",
+				SkipUpdate: true,
+				Format:     "json",
+				Input:      "testdata/fixtures/opensuse-leap-423.tar.gz",
+			},
+			golden: "testdata/opensuse-leap-423.json.golden",
+		},
+		{
+			name: "photon 1.0 integration",
+			testArgs: args{
+				Version:    "dev",
+				SkipUpdate: true,
+				Format:     "json",
+				Input:      "testdata/fixtures/photon-10.tar.gz",
+			},
+			golden: "testdata/photon-10.json.golden",
+		},
+		{
+			name: "photon 2.0 integration",
+			testArgs: args{
+				Version:    "dev",
+				SkipUpdate: true,
+				Format:     "json",
+				Input:      "testdata/fixtures/photon-20.tar.gz",
+			},
+			golden: "testdata/photon-20.json.golden",
+		},
+		{
+			name: "photon 3.0 integration",
+			testArgs: args{
+				Version:    "dev",
+				SkipUpdate: true,
+				Format:     "json",
+				Input:      "testdata/fixtures/photon-30.tar.gz",
 			},
 			golden: "testdata/photon-30.json.golden",
 		},
 		{
-			name: "CBL-Mariner 1.0",
+			name: "buxybox with Cargo.lock integration",
 			testArgs: args{
-				Format: "json",
-				Input:  "testdata/fixtures/images/mariner-1.0.tar.gz",
-			},
-			golden: "testdata/mariner-1.0.json.golden",
-		},
-		{
-			name: "busybox with Cargo.lock integration",
-			testArgs: args{
-				Format: "json",
-				Input:  "testdata/fixtures/images/busybox-with-lockfile.tar.gz",
+				Version:    "dev",
+				SkipUpdate: true,
+				Format:     "json",
+				Input:      "testdata/fixtures/busybox-with-lockfile.tar.gz",
 			},
 			golden: "testdata/busybox-with-lockfile.json.golden",
 		},
 		{
-			name: "fluentd with RubyGems",
+			name: "fluentd with multiple lock files",
 			testArgs: args{
+				Version:       "dev",
+				SkipUpdate:    true,
 				IgnoreUnfixed: true,
 				Format:        "json",
-				Input:         "testdata/fixtures/images/fluentd-multiple-lockfiles.tar.gz",
+				Input:         "testdata/fixtures/fluentd-multiple-lockfiles.tar.gz",
+				SkipFiles:     []string{"/Gemfile.lock"},
+				SkipDirs: []string{
+					"/var/lib/gems/2.5.0/gems/http_parser.rb-0.6.0",
+					"/var/lib/gems/2.5.0/gems/fluent-plugin-detect-exceptions-0.0.13",
+				},
 			},
-			golden: "testdata/fluentd-gems.json.golden",
+			golden: "testdata/fluentd-multiple-lockfiles.json.golden",
 		},
 	}
 
-	// Set up testing DB
-	cacheDir := initDB(t)
+	// Copy DB file
+	cacheDir, err := gunzipDB()
+	require.NoError(t, err)
+	defer os.RemoveAll(cacheDir)
 
-	// Set a temp dir so that modules will not be loaded
-	t.Setenv("XDG_DATA_HOME", cacheDir)
+	// Setup CLI App
+	app := commands.NewApp("dev")
+	app.Writer = ioutil.Discard
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			osArgs := []string{
-				"--cache-dir",
-				cacheDir,
-				"image",
-				"-q",
-				"--format",
-				tt.testArgs.Format,
-				"--skip-update",
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+
+			osArgs := []string{"vul"}
+			osArgs = append(osArgs, "--cache-dir", cacheDir)
+			if c.testArgs.WithImageSubcommand {
+				osArgs = append(osArgs, "image")
 			}
+			osArgs = append(osArgs, "--format", c.testArgs.Format)
 
-			if tt.testArgs.IgnoreUnfixed {
+			if c.testArgs.SkipUpdate {
+				osArgs = append(osArgs, "--skip-update")
+			}
+			if c.testArgs.IgnoreUnfixed {
 				osArgs = append(osArgs, "--ignore-unfixed")
 			}
-			if len(tt.testArgs.Severity) != 0 {
-				osArgs = append(osArgs, "--severity", strings.Join(tt.testArgs.Severity, ","))
+			if len(c.testArgs.Severity) != 0 {
+				osArgs = append(osArgs,
+					[]string{"--severity", strings.Join(c.testArgs.Severity, ",")}...,
+				)
 			}
-			if len(tt.testArgs.IgnoreIDs) != 0 {
+			if len(c.testArgs.IgnoreIDs) != 0 {
 				vulIgnore := ".vulignore"
-				err := os.WriteFile(vulIgnore, []byte(strings.Join(tt.testArgs.IgnoreIDs, "\n")), 0444)
+				err := ioutil.WriteFile(vulIgnore, []byte(strings.Join(c.testArgs.IgnoreIDs, "\n")), 0444)
 				assert.NoError(t, err, "failed to write .vulignore")
 				defer os.Remove(vulIgnore)
 			}
-			if tt.testArgs.Input != "" {
-				osArgs = append(osArgs, "--input", tt.testArgs.Input)
+			if c.testArgs.Input != "" {
+				osArgs = append(osArgs, "--input", c.testArgs.Input)
 			}
 
-			if len(tt.testArgs.SkipFiles) != 0 {
-				for _, skipFile := range tt.testArgs.SkipFiles {
+			if len(c.testArgs.SkipFiles) != 0 {
+				for _, skipFile := range c.testArgs.SkipFiles {
 					osArgs = append(osArgs, "--skip-files", skipFile)
 				}
 			}
 
-			if len(tt.testArgs.SkipDirs) != 0 {
-				for _, skipDir := range tt.testArgs.SkipDirs {
+			if len(c.testArgs.SkipDirs) != 0 {
+				for _, skipDir := range c.testArgs.SkipDirs {
 					osArgs = append(osArgs, "--skip-dirs", skipDir)
 				}
 			}
 
-			// Set up the output file
-			outputFile := filepath.Join(t.TempDir(), "output.json")
+			// Setup the output file
+			var outputFile string
 			if *update {
-				outputFile = tt.golden
+				outputFile = c.golden
+			} else {
+				output, _ := ioutil.TempFile("", "integration")
+				assert.Nil(t, output.Close())
+				defer os.Remove(output.Name())
+				outputFile = output.Name()
 			}
 
-			osArgs = append(osArgs, []string{
-				"--output",
-				outputFile,
-			}...)
+			osArgs = append(osArgs, []string{"--output", outputFile}...)
 
 			// Run Vul
-			err := execute(osArgs)
-			require.NoError(t, err)
+			assert.Nil(t, app.Run(osArgs))
 
 			// Compare want and got
-			compareReports(t, tt.golden, outputFile, nil)
-		})
-	}
-}
+			want, err := ioutil.ReadFile(c.golden)
+			assert.NoError(t, err)
+			got, err := ioutil.ReadFile(outputFile)
+			assert.NoError(t, err)
 
-func TestTarWithEnv(t *testing.T) {
-	type args struct {
-		IgnoreUnfixed bool
-		Severity      []string
-		Format        string
-		Input         string
-		SkipDirs      []string
-	}
-	tests := []struct {
-		name     string
-		testArgs args
-		golden   string
-	}{
-		{
-			name: "alpine 3.9 with skip dirs",
-			testArgs: args{
-				Format: "json",
-				Input:  "testdata/fixtures/images/alpine-39.tar.gz",
-				SkipDirs: []string{
-					"/etc",
-				},
-			},
-			golden: "testdata/alpine-39-skip.json.golden",
-		},
-		{
-			name: "alpine 3.9 with high and critical severity",
-			testArgs: args{
-				IgnoreUnfixed: true,
-				Severity: []string{
-					"HIGH",
-					"CRITICAL",
-				},
-				Format: "json",
-				Input:  "testdata/fixtures/images/alpine-39.tar.gz",
-			},
-			golden: "testdata/alpine-39-high-critical.json.golden",
-		},
-		{
-			name: "debian buster/10 with --ignore-unfixed option",
-			testArgs: args{
-				IgnoreUnfixed: true,
-				Format:        "json",
-				Input:         "testdata/fixtures/images/debian-buster.tar.gz",
-			},
-			golden: "testdata/debian-buster-ignore-unfixed.json.golden",
-		},
-	}
-
-	// Set up testing DB
-	cacheDir := initDB(t)
-
-	// Set a temp dir so that modules will not be loaded
-	t.Setenv("XDG_DATA_HOME", cacheDir)
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			osArgs := []string{"image"}
-
-			t.Setenv("VUL_FORMAT", tt.testArgs.Format)
-			t.Setenv("VUL_CACHE_DIR", cacheDir)
-			t.Setenv("VUL_QUIET", "true")
-			t.Setenv("VUL_SKIP_UPDATE", "true")
-
-			if tt.testArgs.IgnoreUnfixed {
-				t.Setenv("VUL_IGNORE_UNFIXED", "true")
-			}
-			if len(tt.testArgs.Severity) != 0 {
-				t.Setenv("VUL_SEVERITY", strings.Join(tt.testArgs.Severity, ","))
-			}
-			if tt.testArgs.Input != "" {
-				osArgs = append(osArgs, "--input", tt.testArgs.Input)
-			}
-
-			if len(tt.testArgs.SkipDirs) != 0 {
-				t.Setenv("VUL_SKIP_DIRS", strings.Join(tt.testArgs.SkipDirs, ","))
-			}
-
-			// Set up the output file
-			outputFile := filepath.Join(t.TempDir(), "output.json")
-
-			osArgs = append(osArgs, []string{
-				"--output",
-				outputFile,
-			}...)
-
-			// Run Vul
-			err := execute(osArgs)
-			require.NoError(t, err)
-
-			// Compare want and got
-			compareReports(t, tt.golden, outputFile, nil)
-		})
-	}
-}
-
-func TestTarWithConfigFile(t *testing.T) {
-	tests := []struct {
-		name       string
-		input      string
-		configFile string
-		golden     string
-	}{
-		{
-			name:  "alpine 3.9 with high and critical severity",
-			input: "testdata/fixtures/images/alpine-39.tar.gz",
-			configFile: `quiet: true
-format: json
-severity:
-  - HIGH
-  - CRITICAL
-vulnerability:
-  type:
-    - os
-cache:
-  dir: /should/be/overwritten
-`,
-			golden: "testdata/alpine-39-high-critical.json.golden",
-		},
-		{
-			name:  "debian buster/10 with --ignore-unfixed option",
-			input: "testdata/fixtures/images/debian-buster.tar.gz",
-			configFile: `quiet: true
-format: json
-vulnerability:
-  ignore-unfixed: true
-cache:
-  dir: /should/be/overwritten
-`,
-			golden: "testdata/debian-buster-ignore-unfixed.json.golden",
-		},
-	}
-
-	// Set up testing DB
-	cacheDir := initDB(t)
-
-	// Set a temp dir so that modules will not be loaded
-	t.Setenv("XDG_DATA_HOME", cacheDir)
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tmpDir := t.TempDir()
-			outputFile := filepath.Join(tmpDir, "output.json")
-			configPath := filepath.Join(tmpDir, "vul.yaml")
-
-			err := os.WriteFile(configPath, []byte(tt.configFile), 0600)
-			require.NoError(t, err)
-
-			osArgs := []string{
-				"--cache-dir",
-				cacheDir,
-				"image",
-				"--skip-db-update",
-				"--config",
-				configPath,
-				"--input",
-				tt.input,
-				"--output",
-				outputFile,
-			}
-
-			// Run Vul
-			err = execute(osArgs)
-			require.NoError(t, err)
-
-			// Compare want and got
-			compareReports(t, tt.golden, outputFile, nil)
+			assert.JSONEq(t, string(want), string(got))
 		})
 	}
 }

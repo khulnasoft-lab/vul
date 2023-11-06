@@ -2,6 +2,7 @@ package report_test
 
 import (
 	"bytes"
+	"io/ioutil"
 	"os"
 	"testing"
 	"time"
@@ -10,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	dbTypes "github.com/khulnasoft-lab/vul-db/pkg/types"
-	"github.com/khulnasoft-lab/vul/pkg/clock"
 	"github.com/khulnasoft-lab/vul/pkg/report"
 	"github.com/khulnasoft-lab/vul/pkg/types"
 )
@@ -30,9 +30,6 @@ func TestReportWriter_Template(t *testing.T) {
 					PkgName:         "foo",
 					Vulnerability: dbTypes.Vulnerability{
 						Severity: dbTypes.SeverityHigh.String(),
-						VendorSeverity: map[dbTypes.SourceID]dbTypes.Severity{
-							"nvd": 1,
-						},
 					},
 				},
 				{
@@ -156,33 +153,59 @@ func TestReportWriter_Template(t *testing.T) {
 			expected: `Critical: 2, High: 1`,
 		},
 		{
-			name:          "happy path: env var parsing",
+			name:          "happy path: env var parsing and getCurrentTime",
 			detectedVulns: []types.DetectedVulnerability{},
-			template:      `{{ lower (env "AWS_ACCOUNT_ID") }}`,
-			expected:      `123456789012`,
+			template:      `{{ toLower (getEnv "AWS_ACCOUNT_ID") }} {{ getCurrentTime }}`,
+			expected:      `123456789012 2020-08-10T07:28:17.000958601Z`,
 		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			clock.SetFakeTime(t, time.Date(2020, 8, 10, 7, 28, 17, 958601, time.UTC))
-
+			report.Now = func() time.Time {
+				return time.Date(2020, 8, 10, 7, 28, 17, 958601, time.UTC)
+			}
 			os.Setenv("AWS_ACCOUNT_ID", "123456789012")
-			got := bytes.Buffer{}
-			inputReport := types.Report{
-				Results: types.Results{
-					{
-						Target:          "foojunit",
-						Type:            "test",
-						Vulnerabilities: tc.detectedVulns,
-					},
+			tmplWritten := bytes.Buffer{}
+			inputResults := report.Results{
+				{
+					Target:          "foojunit",
+					Type:            "test",
+					Vulnerabilities: tc.detectedVulns,
 				},
 			}
 
-			w, err := report.NewTemplateWriter(&got, tc.template)
-			require.NoError(t, err)
-			err = w.Write(inputReport)
-			assert.NoError(t, err)
-			assert.Equal(t, tc.expected, got.String())
+			assert.NoError(t, report.WriteResults("template", &tmplWritten, nil, inputResults, tc.template, false))
+			assert.Equal(t, tc.expected, tmplWritten.String())
+		})
+	}
+}
+
+func TestReportWriter_Template_SARIF(t *testing.T) {
+	testCases := []struct {
+		name          string
+		target        string
+		detectedVulns []types.DetectedVulnerability
+		want          string
+	}{
+		//TODO: refactor tests
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			templateFile := "../../contrib/sarif.tpl"
+			got := bytes.Buffer{}
+
+			template, err := ioutil.ReadFile(templateFile)
+			require.NoError(t, err, tc.name)
+
+			inputResults := report.Results{
+				report.Result{
+					Target:          tc.target,
+					Type:            "footype",
+					Vulnerabilities: tc.detectedVulns,
+				},
+			}
+			assert.NoError(t, report.WriteResults("template", &got, nil, inputResults, string(template), false), tc.name)
+			assert.JSONEq(t, tc.want, got.String(), tc.name)
 		})
 	}
 }

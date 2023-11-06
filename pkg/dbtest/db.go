@@ -4,13 +4,11 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
 	fixtures "github.com/khulnasoft-lab/boltdb-fixtures"
 	"github.com/khulnasoft-lab/vul-db/pkg/db"
-	jdb "github.com/khulnasoft-lab/vul-java-db/pkg/db"
 )
 
 // InitDB initializes testing database.
@@ -33,25 +31,4 @@ func InitDB(t *testing.T, fixtureFiles []string) string {
 	require.NoError(t, db.Init(dir))
 
 	return dir
-}
-
-func Close() error {
-	return db.Close()
-}
-
-func InitJavaDB(t *testing.T, cacheDir string) {
-	dbDir := filepath.Join(cacheDir, "java-db")
-	javaDB, err := jdb.New(dbDir)
-	require.NoError(t, err)
-	err = javaDB.Init()
-	require.NoError(t, err)
-
-	meta := jdb.Metadata{
-		Version:    jdb.SchemaVersion,
-		NextUpdate: time.Now().Add(24 * time.Hour),
-		UpdatedAt:  time.Now(),
-	}
-	metac := jdb.NewMetadata(dbDir)
-	err = metac.Update(meta)
-	require.NoError(t, err)
 }

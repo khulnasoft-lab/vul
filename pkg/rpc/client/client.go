@@ -2,98 +2,69 @@ package client
 
 import (
 	"context"
-	"crypto/tls"
 	"net/http"
 
+	ftypes "github.com/aquasecurity/fanal/types"
+
+	"github.com/khulnasoft-lab/vul/pkg/types"
+
+	"github.com/google/wire"
 	"golang.org/x/xerrors"
 
-	ftypes "github.com/khulnasoft-lab/vul/pkg/fanal/types"
+	"github.com/khulnasoft-lab/vul/pkg/report"
 	r "github.com/khulnasoft-lab/vul/pkg/rpc"
-	"github.com/khulnasoft-lab/vul/pkg/types"
-	xstrings "github.com/khulnasoft-lab/vul/pkg/x/strings"
 	rpc "github.com/khulnasoft-lab/vul/rpc/scanner"
 )
 
-type options struct {
-	rpcClient rpc.Scanner
+// SuperSet binds the dependencies for RPC client
+var SuperSet = wire.NewSet(
+	NewProtobufClient,
+	NewScanner,
+)
+
+// RemoteURL for RPC remote host
+type RemoteURL string
+
+// NewProtobufClient is the factory method to return RPC scanner
+func NewProtobufClient(remoteURL RemoteURL) rpc.Scanner {
+	return rpc.NewScannerProtobufClient(string(remoteURL), &http.Client{})
 }
 
-type Option func(*options)
-
-// WithRPCClient takes rpc client for testability
-func WithRPCClient(c rpc.Scanner) Option {
-	return func(opts *options) {
-		opts.rpcClient = c
-	}
-}
-
-// ScannerOption holds options for RPC client
-type ScannerOption struct {
-	RemoteURL     string
-	Insecure      bool
-	CustomHeaders http.Header
-}
+// CustomHeaders for holding HTTP headers
+type CustomHeaders http.Header
 
 // Scanner implements the RPC scanner
 type Scanner struct {
-	customHeaders http.Header
+	customHeaders CustomHeaders
 	client        rpc.Scanner
 }
 
 // NewScanner is the factory method to return RPC Scanner
-func NewScanner(scannerOptions ScannerOption, opts ...Option) Scanner {
-	httpClient := &http.Client{
-		Transport: &http.Transport{
-			Proxy: http.ProxyFromEnvironment,
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: scannerOptions.Insecure,
-			},
-		},
-	}
-
-	c := rpc.NewScannerProtobufClient(scannerOptions.RemoteURL, httpClient)
-
-	o := &options{rpcClient: c}
-	for _, opt := range opts {
-		opt(o)
-	}
-
-	return Scanner{
-		customHeaders: scannerOptions.CustomHeaders,
-		client:        o.rpcClient,
-	}
+func NewScanner(customHeaders CustomHeaders, s rpc.Scanner) Scanner {
+	return Scanner{customHeaders: customHeaders, client: s}
 }
 
 // Scan scans the image
-func (s Scanner) Scan(ctx context.Context, target, artifactKey string, blobKeys []string, opts types.ScanOptions) (types.Results, ftypes.OS, error) {
-	ctx = WithCustomHeaders(ctx, s.customHeaders)
-
-	// Convert to the rpc struct
-	licenseCategories := make(map[string]*rpc.Licenses)
-	for category, names := range opts.LicenseCategories {
-		licenseCategories[string(category)] = &rpc.Licenses{Names: names}
-	}
+func (s Scanner) Scan(target string, imageID string, layerIDs []string, options types.ScanOptions) (report.Results, *ftypes.OS, bool, error) {
+	ctx := WithCustomHeaders(context.Background(), http.Header(s.customHeaders))
 
 	var res *rpc.ScanResponse
 	err := r.Retry(func() error {
 		var err error
 		res, err = s.client.Scan(ctx, &rpc.ScanRequest{
 			Target:     target,
-			ArtifactId: artifactKey,
-			BlobIds:    blobKeys,
+			ArtifactId: imageID,
+			BlobIds:    layerIDs,
 			Options: &rpc.ScanOptions{
-				VulnType:          opts.VulnType,
-				Scanners:          xstrings.ToStringSlice(opts.Scanners),
-				ListAllPackages:   opts.ListAllPackages,
-				LicenseCategories: licenseCategories,
-				IncludeDevDeps:    opts.IncludeDevDeps,
+				VulnType:       options.VulnType,
+				SecurityChecks: options.SecurityChecks,
 			},
 		})
 		return err
 	})
 	if err != nil {
-		return nil, ftypes.OS{}, xerrors.Errorf("failed to detect vulnerabilities via RPC: %w", err)
+		return nil, nil, false, xerrors.Errorf("failed to detect vulnerabilities via RPC: %w", err)
 	}
 
-	return r.ConvertFromRPCResults(res.Results), r.ConvertFromRPCOS(res.Os), nil
+	return r.ConvertFromRPCResults(res.Results), r.ConvertFromRPCOS(res.Os), res.Eosl, nil
 }

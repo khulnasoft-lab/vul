@@ -1,74 +1,75 @@
-//go:build integration || vm_integration || module_integration || k8s_integration
+// +build integration
 
 package integration
 
 import (
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"flag"
-	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"os"
 	"path/filepath"
-	"sort"
-	"strings"
-	"testing"
 	"time"
 
-	cdx "github.com/CycloneDX/cyclonedx-go"
-	"github.com/samber/lo"
-	spdxjson "github.com/spdx/tools-golang/json"
-	"github.com/spdx/tools-golang/spdx"
-	"github.com/spdx/tools-golang/spdxlib"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"github.com/xeipuuv/gojsonschema"
+	"github.com/spf13/afero"
 
 	"github.com/khulnasoft-lab/vul-db/pkg/db"
-	"github.com/khulnasoft-lab/vul-db/pkg/metadata"
-	"github.com/khulnasoft-lab/vul/pkg/commands"
-	"github.com/khulnasoft-lab/vul/pkg/dbtest"
-	"github.com/khulnasoft-lab/vul/pkg/types"
-
-	_ "modernc.org/sqlite"
 )
 
 var update = flag.Bool("update", false, "update golden files")
 
-const SPDXSchema = "https://raw.githubusercontent.com/spdx/spdx-spec/development/v%s/schemas/spdx-schema.json"
-
-func initDB(t *testing.T) string {
-	fixtureDir := filepath.Join("testdata", "fixtures", "db")
-	entries, err := os.ReadDir(fixtureDir)
-	require.NoError(t, err)
-
-	var fixtures []string
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		fixtures = append(fixtures, filepath.Join(fixtureDir, entry.Name()))
+func gunzipDB() (string, error) {
+	gz, err := os.Open("testdata/vul.db.gz")
+	if err != nil {
+		return "", err
+	}
+	zr, err := gzip.NewReader(gz)
+	if err != nil {
+		return "", err
 	}
 
-	cacheDir := dbtest.InitDB(t, fixtures)
-	defer db.Close()
+	tmpDir, err := ioutil.TempDir("", "integration")
+	if err != nil {
+		return "", err
+	}
 
-	dbDir := filepath.Dir(db.Path(cacheDir))
+	dbPath := db.Path(tmpDir)
+	dbDir := filepath.Dir(dbPath)
+	err = os.MkdirAll(dbDir, 0700)
+	if err != nil {
+		return "", err
+	}
 
+	file, err := os.Create(dbPath)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	if _, err = io.Copy(file, zr); err != nil {
+		return "", err
+	}
+
+	fs := afero.NewOsFs()
 	metadataFile := filepath.Join(dbDir, "metadata.json")
-	f, err := os.Create(metadataFile)
-	require.NoError(t, err)
-
-	err = json.NewEncoder(f).Encode(metadata.Metadata{
-		Version:    db.SchemaVersion,
-		NextUpdate: time.Now().Add(24 * time.Hour),
-		UpdatedAt:  time.Now(),
+	b, err := json.Marshal(db.Metadata{
+		Version:    1,
+		Type:       1,
+		NextUpdate: time.Time{},
+		UpdatedAt:  time.Time{},
 	})
-	require.NoError(t, err)
+	if err != nil {
+		return "", err
+	}
+	err = afero.WriteFile(fs, metadataFile, b, 0600)
+	if err != nil {
+		return "", err
+	}
 
-	dbtest.InitJavaDB(t, cacheDir)
-	return cacheDir
+	return tmpDir, nil
 }
 
 func getFreePort() (int, error) {
@@ -97,150 +98,5 @@ func waitPort(ctx context.Context, addr string) error {
 		default:
 			time.Sleep(1 * time.Second)
 		}
-	}
-}
-
-func readReport(t *testing.T, filePath string) types.Report {
-	t.Helper()
-
-	f, err := os.Open(filePath)
-	require.NoError(t, err, filePath)
-	defer f.Close()
-
-	var report types.Report
-	err = json.NewDecoder(f).Decode(&report)
-	require.NoError(t, err, filePath)
-
-	// We don't compare history because the nano-seconds in "created" don't match
-	report.Metadata.ImageConfig.History = nil
-
-	// We don't compare repo tags because the archive doesn't support it
-	report.Metadata.RepoTags = nil
-	report.Metadata.RepoDigests = nil
-
-	for i, result := range report.Results {
-		for j := range result.Vulnerabilities {
-			report.Results[i].Vulnerabilities[j].Layer.Digest = ""
-		}
-
-		sort.Slice(result.CustomResources, func(i, j int) bool {
-			if result.CustomResources[i].Type != result.CustomResources[j].Type {
-				return result.CustomResources[i].Type < result.CustomResources[j].Type
-			}
-			return result.CustomResources[i].FilePath < result.CustomResources[j].FilePath
-		})
-	}
-
-	return report
-}
-
-func readCycloneDX(t *testing.T, filePath string) *cdx.BOM {
-	f, err := os.Open(filePath)
-	require.NoError(t, err)
-	defer f.Close()
-
-	bom := cdx.NewBOM()
-	decoder := cdx.NewBOMDecoder(f, cdx.BOMFileFormatJSON)
-	err = decoder.Decode(bom)
-	require.NoError(t, err)
-
-	// Sort components
-	if bom.Components != nil {
-		sort.Slice(*bom.Components, func(i, j int) bool {
-			return (*bom.Components)[i].Name < (*bom.Components)[j].Name
-		})
-		for i := range *bom.Components {
-			(*bom.Components)[i].BOMRef = ""
-			sort.Slice(*(*bom.Components)[i].Properties, func(ii, jj int) bool {
-				return (*(*bom.Components)[i].Properties)[ii].Name < (*(*bom.Components)[i].Properties)[jj].Name
-			})
-		}
-		sort.Slice(*bom.Vulnerabilities, func(i, j int) bool {
-			return (*bom.Vulnerabilities)[i].ID < (*bom.Vulnerabilities)[j].ID
-		})
-	}
-
-	return bom
-}
-
-func readSpdxJson(t *testing.T, filePath string) *spdx.Document {
-	f, err := os.Open(filePath)
-	require.NoError(t, err)
-	defer f.Close()
-
-	bom, err := spdxjson.Read(f)
-	require.NoError(t, err)
-
-	sort.Slice(bom.Relationships, func(i, j int) bool {
-		if bom.Relationships[i].RefA.ElementRefID != bom.Relationships[j].RefA.ElementRefID {
-			return bom.Relationships[i].RefA.ElementRefID < bom.Relationships[j].RefA.ElementRefID
-		}
-		return bom.Relationships[i].RefB.ElementRefID < bom.Relationships[j].RefB.ElementRefID
-	})
-
-	sort.Slice(bom.Files, func(i, j int) bool {
-		return bom.Files[i].FileSPDXIdentifier < bom.Files[j].FileSPDXIdentifier
-	})
-
-	// We don't compare values which change each time an SBOM is generated
-	bom.CreationInfo.Created = ""
-	bom.DocumentNamespace = ""
-
-	return bom
-}
-
-func execute(osArgs []string) error {
-	// Setup CLI App
-	app := commands.NewApp()
-	app.SetOut(io.Discard)
-
-	// Run Vul
-	app.SetArgs(osArgs)
-	return app.Execute()
-}
-
-func compareReports(t *testing.T, wantFile, gotFile string, override func(*types.Report)) {
-	want := readReport(t, wantFile)
-	got := readReport(t, gotFile)
-	if override != nil {
-		override(&want)
-	}
-	assert.Equal(t, want, got)
-}
-
-func compareCycloneDX(t *testing.T, wantFile, gotFile string) {
-	want := readCycloneDX(t, wantFile)
-	got := readCycloneDX(t, gotFile)
-	assert.Equal(t, want, got)
-
-	// Validate CycloneDX output against the JSON schema
-	validateReport(t, got.JSONSchema, got)
-}
-
-func compareSPDXJson(t *testing.T, wantFile, gotFile string) {
-	want := readSpdxJson(t, wantFile)
-	got := readSpdxJson(t, gotFile)
-	assert.Equal(t, want, got)
-
-	SPDXVersion, ok := strings.CutPrefix(want.SPDXVersion, "SPDX-")
-	assert.True(t, ok)
-
-	assert.NoError(t, spdxlib.ValidateDocument(got))
-
-	// Validate SPDX output against the JSON schema
-	validateReport(t, fmt.Sprintf(SPDXSchema, SPDXVersion), got)
-}
-
-func validateReport(t *testing.T, schema string, report any) {
-	schemaLoader := gojsonschema.NewReferenceLoader(schema)
-	documentLoader := gojsonschema.NewGoLoader(report)
-	result, err := gojsonschema.Validate(schemaLoader, documentLoader)
-	require.NoError(t, err)
-
-	if valid := result.Valid(); !valid {
-		errs := lo.Map(result.Errors(), func(err gojsonschema.ResultError, _ int) string {
-			return err.String()
-		})
-		assert.True(t, valid, strings.Join(errs, "\n"))
 	}
 }

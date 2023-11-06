@@ -8,9 +8,9 @@ import (
 	"golang.org/x/xerrors"
 	"k8s.io/utils/clock"
 
+	ftypes "github.com/aquasecurity/fanal/types"
+	dbTypes "github.com/khulnasoft-lab/vul-db/pkg/types"
 	oracleoval "github.com/khulnasoft-lab/vul-db/pkg/vulnsrc/oracle-oval"
-	osver "github.com/khulnasoft-lab/vul/pkg/detector/ospkg/version"
-	ftypes "github.com/khulnasoft-lab/vul/pkg/fanal/types"
 	"github.com/khulnasoft-lab/vul/pkg/log"
 	"github.com/khulnasoft-lab/vul/pkg/scanner/utils"
 	"github.com/khulnasoft-lab/vul/pkg/types"
@@ -27,13 +27,12 @@ var (
 		"6": time.Date(2021, 3, 21, 23, 59, 59, 0, time.UTC),
 		"7": time.Date(2024, 7, 23, 23, 59, 59, 0, time.UTC),
 		"8": time.Date(2029, 7, 18, 23, 59, 59, 0, time.UTC),
-		"9": time.Date(2032, 7, 18, 23, 59, 59, 0, time.UTC),
 	}
 )
 
 // Scanner implements oracle vulnerability scanner
 type Scanner struct {
-	vs    *oracleoval.VulnSrc
+	vs    dbTypes.VulnSrc
 	clock clock.Clock
 }
 
@@ -45,27 +44,20 @@ func NewScanner() *Scanner {
 	}
 }
 
-func extractKsplice(v string) string {
-	subs := strings.Split(strings.ToLower(v), ".")
-	for _, s := range subs {
-		if strings.HasPrefix(s, "ksplice") {
-			return s
-		}
-	}
-	return ""
-}
-
 // Detect scans and return vulnerability in Oracle scanner
-func (s *Scanner) Detect(osVer string, _ *ftypes.Repository, pkgs []ftypes.Package) ([]types.DetectedVulnerability, error) {
+func (s *Scanner) Detect(osVer string, pkgs []ftypes.Package) ([]types.DetectedVulnerability, error) {
 	log.Logger.Info("Detecting Oracle Linux vulnerabilities...")
 
-	osVer = osver.Major(osVer)
+	if strings.Count(osVer, ".") > 0 {
+		osVer = osVer[:strings.Index(osVer, ".")]
+	}
+
 	log.Logger.Debugf("Oracle Linux: os version: %s", osVer)
 	log.Logger.Debugf("Oracle Linux: the number of packages: %d", len(pkgs))
 
 	var vulns []types.DetectedVulnerability
 	for _, pkg := range pkgs {
-		advisories, err := s.vs.Get(osVer, pkg.Name)
+		advisories, err := s.vs.Get(osVer, pkg.SrcName)
 		if err != nil {
 			return nil, xerrors.Errorf("failed to get Oracle Linux advisory: %w", err)
 		}
@@ -73,23 +65,16 @@ func (s *Scanner) Detect(osVer string, _ *ftypes.Repository, pkgs []ftypes.Packa
 		installed := utils.FormatVersion(pkg)
 		installedVersion := version.NewVersion(installed)
 		for _, adv := range advisories {
-			// when one of them doesn't have ksplice, we'll also skip it
-			// extract kspliceX and compare it with kspliceY in advisories
-			// if kspliceX and kspliceY are different, we will skip the advisory
-			if extractKsplice(adv.FixedVersion) != extractKsplice(pkg.Release) {
+			// Skip if only one of them contains .ksplice1.
+			if strings.Contains(adv.FixedVersion, ".ksplice1.") != strings.Contains(pkg.Release, ".ksplice1.") {
 				continue
 			}
-
 			fixedVersion := version.NewVersion(adv.FixedVersion)
 			vuln := types.DetectedVulnerability{
 				VulnerabilityID:  adv.VulnerabilityID,
-				PkgID:            pkg.ID,
 				PkgName:          pkg.Name,
 				InstalledVersion: installed,
-				PkgRef:           pkg.Ref,
 				Layer:            pkg.Layer,
-				Custom:           adv.Custom,
-				DataSource:       adv.DataSource,
 			}
 			if installedVersion.LessThan(fixedVersion) {
 				vuln.FixedVersion = adv.FixedVersion
@@ -100,7 +85,17 @@ func (s *Scanner) Detect(osVer string, _ *ftypes.Repository, pkgs []ftypes.Packa
 	return vulns, nil
 }
 
-// IsSupportedVersion checks if the version is supported.
-func (s *Scanner) IsSupportedVersion(osFamily ftypes.OSType, osVer string) bool {
-	return osver.Supported(s.clock, eolDates, osFamily, osver.Major(osVer))
+// IsSupportedVersion checks is OSFamily can be scanned with Oracle scanner
+func (s *Scanner) IsSupportedVersion(osFamily, osVer string) bool {
+	if strings.Count(osVer, ".") > 0 {
+		osVer = osVer[:strings.Index(osVer, ".")]
+	}
+
+	eol, ok := eolDates[osVer]
+	if !ok {
+		log.Logger.Warnf("This OS version is not on the EOL list: %s %s", osFamily, osVer)
+		return false
+	}
+
+	return s.clock.Now().Before(eol)
 }

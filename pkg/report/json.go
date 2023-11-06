@@ -6,8 +6,6 @@ import (
 	"io"
 
 	"golang.org/x/xerrors"
-
-	"github.com/khulnasoft-lab/vul/pkg/types"
 )
 
 // JSONWriter implements result Writer
@@ -16,13 +14,13 @@ type JSONWriter struct {
 }
 
 // Write writes the results in JSON format
-func (jw JSONWriter) Write(report types.Report) error {
-	output, err := json.MarshalIndent(report, "", "  ")
+func (jw JSONWriter) Write(results Results) error {
+	output, err := json.MarshalIndent(results, "", "  ")
 	if err != nil {
 		return xerrors.Errorf("failed to marshal json: %w", err)
 	}
 
-	if _, err = fmt.Fprintln(jw.Output, string(output)); err != nil {
+	if _, err = fmt.Fprint(jw.Output, string(output)); err != nil {
 		return xerrors.Errorf("failed to write json: %w", err)
 	}
 	return nil

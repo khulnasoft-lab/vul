@@ -1,12 +1,6 @@
 {{- if .Values.ingress.enabled -}}
 {{- $fullName := include "vul.fullname" . -}}
-{{- if .Capabilities.APIVersions.Has "networking.k8s.io/v1" }}
-apiVersion: networking.k8s.io/v1
-{{- else if .Capabilities.APIVersions.Has "networking.k8s.io/v1beta1" }}
 apiVersion: networking.k8s.io/v1beta1
-{{- else }}
-apiVersion: extensions/v1beta1
-{{- end }}
 kind: Ingress
 metadata:
   name: {{ include "vul.fullname" . }}
@@ -18,9 +12,6 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-{{- if and (.Values.ingress.ingressClassName) (semverCompare ">= v1.18.0" .Capabilities.KubeVersion.Version) }}
-  ingressClassName: {{ .Values.ingress.ingressClassName }}
-{{- end }}
 {{- if .Values.ingress.tls }}
   tls:
   {{- range .Values.ingress.tls }}
@@ -36,18 +27,9 @@ spec:
     - host: {{ .host | quote }}
       http:
         paths:
-          - path: {{ $.Values.ingress.path }}
-        {{- if $.Capabilities.APIVersions.Has "networking.k8s.io/v1/Ingress" }}
-            pathType: {{ $.Values.ingress.pathType }}
-            backend:
-              service:
-                name: {{ $fullName }}
-                port:
-                  number: {{ $.Values.service.port -}}
-          {{- else }}
+          - path: /
             backend:
               serviceName: {{ $fullName }}
               servicePort: {{ $.Values.service.port -}}
-          {{- end }}
   {{- end }}
 {{- end }}
