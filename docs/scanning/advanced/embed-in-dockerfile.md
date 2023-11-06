@@ -25,4 +25,4 @@ RUN vul filesystem --exit-code 1 --no-progress /
 [...]
 ```
 
-[microscanner]: https://github.com/aquasecurity/microscanner
+[microscanner]: https://github.com/khulnasoft-lab/microscanner

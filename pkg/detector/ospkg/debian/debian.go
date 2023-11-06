@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/khulnasoft-lab/vul-db/pkg/vulnsrc/debian"
-	debianoval "github.com/khulnasoft-lab/vul-db/pkg/vulnsrc/debian-oval"
+	debianoval "github.com/khulnasoft-lab/vul-db/pkg/vulnsrc/debian"
 
 	version "github.com/khulnasoft-lab/go-deb-version"
 	"golang.org/x/xerrors"

@@ -6,7 +6,7 @@ import (
 	"golang.org/x/xerrors"
 
 	dbTypes "github.com/khulnasoft-lab/vul-db/pkg/types"
-	"github.com/khulnasoft-lab/vul-db/pkg/vulnsrc/python"
+	"github.com/khulnasoft-lab/vul-db/pkg/vulnsrc"
 	"github.com/khulnasoft-lab/vul/pkg/detector/library/comparer"
 	"github.com/khulnasoft-lab/vul/pkg/types"
 )

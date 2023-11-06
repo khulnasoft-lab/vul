@@ -8,7 +8,6 @@ import (
 
 	"github.com/khulnasoft-lab/vul-db/pkg/db"
 	"github.com/khulnasoft-lab/vul/pkg/dbtest"
-	"github.com/khulnasoft-lab/vul/pkg/detector/library/cargo"
 	"github.com/khulnasoft-lab/vul/pkg/types"
 )
 

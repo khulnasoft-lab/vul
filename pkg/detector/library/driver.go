@@ -7,7 +7,6 @@ import (
 	ecosystem "github.com/khulnasoft-lab/vul-db/pkg/vulnsrc/ghsa"
 	"github.com/khulnasoft-lab/vul-db/pkg/vulnsrc/vulnerability"
 	"github.com/khulnasoft-lab/vul/pkg/detector/library/bundler"
-	"github.com/khulnasoft-lab/vul/pkg/detector/library/cargo"
 	"github.com/khulnasoft-lab/vul/pkg/detector/library/comparer"
 	"github.com/khulnasoft-lab/vul/pkg/detector/library/composer"
 	"github.com/khulnasoft-lab/vul/pkg/detector/library/ghsa"

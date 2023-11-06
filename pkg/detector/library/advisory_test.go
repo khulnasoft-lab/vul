@@ -1,6 +1,7 @@
 package library_test
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -8,11 +9,11 @@ import (
 
 	"github.com/khulnasoft-lab/vul-db/pkg/db"
 	"github.com/khulnasoft-lab/vul-db/pkg/vulnsrc/vulnerability"
-	"github.com/khulnasoft-lab/vul/pkg/dbtest"
 	"github.com/khulnasoft-lab/vul/pkg/detector/library"
 	"github.com/khulnasoft-lab/vul/pkg/detector/library/bundler"
 	"github.com/khulnasoft-lab/vul/pkg/detector/library/comparer"
 	"github.com/khulnasoft-lab/vul/pkg/types"
+	"github.com/khulnasoft-lab/vul/pkg/utils"
 )
 
 func TestAdvisory_DetectVulnerabilities(t *testing.T) {
@@ -97,7 +98,8 @@ func TestAdvisory_DetectVulnerabilities(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Initialize DB
-			_ = dbtest.InitDB(t, tt.fixtures)
+			dir := utils.InitTestDB(t, tt.fixtures)
+			defer os.RemoveAll(dir)
 			defer db.Close()
 
 			adv := library.NewAdvisory(tt.ecosystem, tt.comparer)

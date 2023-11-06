@@ -21,7 +21,7 @@ COMMANDS:
 GLOBAL OPTIONS:
    --quiet, -q        suppress progress bar and log output (default: false) [$VUL_QUIET]
    --debug, -d        debug mode (default: false) [$VUL_DEBUG]
-   --cache-dir value  cache directory (default: "/Users/teppei/Library/Caches/vul") [$VUL_CACHE_DIR]
+   --cache-dir value  cache directory (default: "/Users/devseccon/Library/Caches/vul") [$VUL_CACHE_DIR]
    --help, -h         show help (default: false)
    --version, -v      print the version (default: false)
 ```

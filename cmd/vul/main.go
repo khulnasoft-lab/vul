@@ -3,8 +3,8 @@ package main
 import (
 	"os"
 
-	"github.com/aquasecurity/vul/pkg/commands"
-	"github.com/aquasecurity/vul/pkg/log"
+	"github.com/khulnasoft-lab/vul/pkg/commands"
+	"github.com/khulnasoft-lab/vul/pkg/log"
 )
 
 var (

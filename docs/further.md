@@ -9,7 +9,7 @@
 - CNCF Webinar 2020
     - [Vul Open Source Scanner for Container Images – Just Download and Run!][cncf]
 - KubeCon + CloudNativeCon Europe 2020 Virtual
-    - [Handling Container Vulnerabilities with Open Policy Agent - Teppei Fukuda, KhulnaSoft Security][kubecon]
+    - [Handling Container Vulnerabilities with Open Policy Agent - KhulnaSoft DevOps, KhulnaSoft Security][kubecon]
   
 ## Blogs
 - [Vul Vulnerability Scanner Joins the KhulnaSoft Open-source Family][join]

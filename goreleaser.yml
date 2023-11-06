@@ -35,8 +35,8 @@ nfpms:
       - deb
       - rpm
     vendor: "khulnasoft-lab"
-    homepage: "https://github.com/aquasecurity"
-    maintainer: "Teppei Fukuda <knqyf263@gmail.com>"
+    homepage: "https://github.com/khulnasoft-lab"
+    maintainer: "KhulnaSoft DevOps <knqyf263@gmail.com>"
     description: "A Fast Vulnerability Scanner for Containers"
     license: "Apache-2.0"
     file_name_template: "{{.ProjectName}}_{{.Version}}_{{.Os}}-{{.Arch}}"

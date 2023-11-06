@@ -6,7 +6,7 @@
 
 # Author
 
-[Teppei Fukuda][knqyf263] (knqyf263)
+[KhulnaSoft DevOps][knqyf263] (knqyf263)
 
 [tomoyamachi]: https://github.com/tomoyamachi
 [masahiro331]: https://github.com/masahiro331

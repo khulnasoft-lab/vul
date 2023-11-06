@@ -1,15 +1,16 @@
 package bundler_test
 
 import (
+	"os"
 	"testing"
 
 	"github.com/khulnasoft-lab/vul/pkg/detector/library/bundler"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/khulnasoft-lab/vul-db/pkg/db"
-	"github.com/khulnasoft-lab/vul/pkg/dbtest"
+	"github.com/khulnasoft-lab/vul/pkg/log"
 	"github.com/khulnasoft-lab/vul/pkg/types"
+	"github.com/khulnasoft-lab/vul/pkg/utils"
 )
 
 func TestAdvisory_DetectVulnerabilities(t *testing.T) {
@@ -61,10 +62,11 @@ func TestAdvisory_DetectVulnerabilities(t *testing.T) {
 		},
 	}
 
+	log.InitLogger(false, true)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_ = dbtest.InitDB(t, tt.fixtures)
-			defer db.Close()
+			dir := utils.InitTestDB(t, tt.fixtures)
+			defer os.RemoveAll(dir)
 
 			a := bundler.NewAdvisory()
 			got, err := a.DetectVulnerabilities(tt.args.pkgName, tt.args.pkgVer)

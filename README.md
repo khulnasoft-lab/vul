@@ -131,4 +131,4 @@ See [here](https://khulnasoft-lab.github.io/vul/latest/usage/)
 
 # Author
 
-[Teppei Fukuda](https://github.com/knqyf263) (knqyf263)
+[KhulnaSoft DevOps](https://github.com/knqyf263) (knqyf263)
