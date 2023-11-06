@@ -3,7 +3,7 @@ module github.com/khulnasoft-lab/vul
 go 1.16
 
 require (
-	github.com/Masterminds/goutils v1.1.0 // indirect
+	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/sprig v2.22.0+incompatible
 	github.com/aquasecurity/fanal v0.0.0-20210519050514-051631be3f69
 	github.com/aquasecurity/go-dep-parser v0.0.0-20210427143403-3c97ccc53976
