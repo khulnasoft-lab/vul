@@ -34,8 +34,7 @@ require (
 	github.com/masahiro331/go-mvn-version v0.0.0-20210429150710-d3157d602a08
 	github.com/mitchellh/copystructure v1.1.1 // indirect
 	github.com/olekukonko/tablewriter v0.0.5
-	github.com/open-policy-agent/opa v0.42.0
-	github.com/sirupsen/logrus v1.8.1 // indirect
+	github.com/open-policy-agent/opa v0.43.1
 	github.com/spf13/afero v1.2.2
 	github.com/stretchr/testify v1.8.4
 	github.com/testcontainers/testcontainers-go v0.9.1-0.20210218153226-c8e070a2f18d
