@@ -6,7 +6,7 @@ require (
 	github.com/Masterminds/goutils v1.1.0 // indirect
 	github.com/Masterminds/sprig v2.22.0+incompatible
 	github.com/aquasecurity/fanal v0.0.0-20210519050514-051631be3f69
-	github.com/aquasecurity/go-dep-parser v0.0.0-20210427143403-3c97ccc53976
+	github.com/aquasecurity/go-dep-parser eaea17a490b4
 	github.com/caarlos0/env/v6 v6.0.0
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/cheggaaa/pb/v3 v3.0.3
