@@ -1,6 +1,3 @@
-<img src="docs/imgs/logo.png" width="150">
-
-
 [![GitHub Release][release-img]][release]
 [![Go Report Card](https://goreportcard.com/badge/github.com/khulnasoft-lab/vul)](https://goreportcard.com/report/github.com/khulnasoft-lab/vul)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)][license]
