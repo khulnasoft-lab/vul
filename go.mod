@@ -10,13 +10,12 @@ require (
 	github.com/caarlos0/env/v6 v6.0.0
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/cheggaaa/pb/v3 v3.0.3
-	github.com/containerd/containerd v1.4.4 // indirect
-	github.com/docker/docker v20.10.3+incompatible
+	github.com/docker/docker v20.10.17+incompatible
 	github.com/docker/go-connections v0.4.0
 	github.com/go-git/go-git/v5 v5.4.2 // indirect
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/golang/protobuf v1.5.2
-	github.com/google/go-containerregistry v0.1.2
+	github.com/google/go-containerregistry v0.5.1
 	github.com/google/go-github/v33 v33.0.0
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/wire v0.4.0
@@ -34,8 +33,8 @@ require (
 	github.com/kylelemons/godebug v1.1.0
 	github.com/masahiro331/go-mvn-version v0.0.0-20210429150710-d3157d602a08
 	github.com/mitchellh/copystructure v1.1.1 // indirect
-	github.com/olekukonko/tablewriter v0.0.4
-	github.com/open-policy-agent/opa v0.25.2
+	github.com/olekukonko/tablewriter v0.0.5
+	github.com/open-policy-agent/opa v0.42.0
 	github.com/sirupsen/logrus v1.8.1 // indirect
 	github.com/spf13/afero v1.2.2
 	github.com/stretchr/testify v1.8.4
