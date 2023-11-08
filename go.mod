@@ -6,7 +6,7 @@ require (
 	github.com/Masterminds/sprig v2.22.0+incompatible
 	github.com/aquasecurity/fanal v0.0.0-20220621143759-7f9185d5d01d
 	github.com/aquasecurity/go-dep-parser v0.0.0-20220607141748-ab2deea55bdf
-	github.com/caarlos0/env/v6 v6.0.0
+	github.com/caarlos0/env/v6 v6.10.1
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/cheggaaa/pb/v3 v3.0.3
 	github.com/docker/docker v24.0.7+incompatible
