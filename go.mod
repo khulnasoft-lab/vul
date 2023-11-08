@@ -22,7 +22,7 @@ require (
 	github.com/huandu/xstrings v1.3.2 // indirect
 	github.com/khulnasoft-lab/boltdb-fixtures v1.0.0
 	github.com/khulnasoft-lab/go-apk-version v0.0.0-20231106220600-c112aac8c552
-	github.com/khulnasoft-lab/go-deb-version v0.0.0-20231008112102-b9979c743dca
+	github.com/khulnasoft-lab/go-deb-version v0.0.0-20231106220903-cfc740a3d549
 	github.com/khulnasoft-lab/go-gem-version v1.0.0
 	github.com/khulnasoft-lab/go-npm-version v1.0.0
 	github.com/khulnasoft-lab/go-pep440-version v1.0.0
