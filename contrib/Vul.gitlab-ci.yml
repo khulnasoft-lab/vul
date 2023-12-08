@@ -1,7 +1,7 @@
 Vul_container_scanning:
   stage: test
   image:
-    name: alpine:3.11
+    name: alpine:3.19
   variables:
     # Override the GIT_STRATEGY variable in your `.gitlab-ci.yml` file and set it to `fetch` if you want to provide a `clair-whitelist.yml`
     # file. See https://docs.gitlab.com/ee/user/application_security/container_scanning/index.html#overriding-the-container-scanning-template
