@@ -9,7 +9,7 @@ require (
 	github.com/caarlos0/env/v6 v6.0.0
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/cheggaaa/pb/v3 v3.0.3
-	github.com/docker/docker v24.0.7+incompatible
+	github.com/docker/docker v24.0.9+incompatible
 	github.com/docker/go-connections v0.4.0
 	github.com/go-git/go-git/v5 v5.4.2 // indirect
 	github.com/go-redis/redis/v8 v8.11.5
