@@ -36,7 +36,7 @@ require (
 	github.com/spf13/afero v1.6.0
 	github.com/stretchr/testify v1.8.4
 	github.com/testcontainers/testcontainers-go v0.13.0
-	github.com/twitchtv/twirp v5.10.1+incompatible
+	github.com/twitchtv/twirp v5.12.1+incompatible
 	github.com/urfave/cli/v2 v2.25.7
 	go.uber.org/zap v1.26.0
 	golang.org/x/oauth2 v0.1.0
