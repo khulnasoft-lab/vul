@@ -41,7 +41,7 @@ require (
 	go.uber.org/zap v1.26.0
 	golang.org/x/oauth2 v0.8.0
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028
-	google.golang.org/protobuf v1.30.0
+	google.golang.org/protobuf v1.33.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/utils v0.0.0-20230726121419-3b25d923346b
 )
