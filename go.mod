@@ -11,15 +11,13 @@ require (
 	github.com/cheggaaa/pb/v3 v3.0.3
 	github.com/docker/docker v24.0.7+incompatible
 	github.com/docker/go-connections v0.4.0
-	github.com/go-git/go-git/v5 v5.4.2 // indirect
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/golang/protobuf v1.5.3
 	github.com/google/go-containerregistry v0.19.0
 	github.com/google/go-github/v33 v33.0.0
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/wire v0.4.0
-	github.com/hashicorp/go-getter v1.7.0
-	github.com/huandu/xstrings v1.3.2 // indirect
+	github.com/hashicorp/go-getter v1.7.4
 	github.com/khulnasoft-lab/boltdb-fixtures v1.0.0
 	github.com/khulnasoft-lab/go-apk-version v0.0.0-20231106220600-c112aac8c552
 	github.com/khulnasoft-lab/go-deb-version v0.0.0-20231008112102-b9979c743dca
@@ -31,6 +29,8 @@ require (
 	github.com/khulnasoft-lab/vul-db v0.0.1
 	github.com/kylelemons/godebug v1.1.0
 	github.com/masahiro331/go-mvn-version v0.0.0-20210429150710-d3157d602a08
+	github.com/moby/patternmatcher v0.6.0 // indirect
+	github.com/moby/sys/sequential v0.5.0 // indirect
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/open-policy-agent/opa v0.43.1
 	github.com/spf13/afero v1.9.2
