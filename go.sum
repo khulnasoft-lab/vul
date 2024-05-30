@@ -2070,6 +2070,8 @@ github.com/khulnasoft-lab/go-apk-version v0.0.0-20231106220600-c112aac8c552 h1:4
 github.com/khulnasoft-lab/go-apk-version v0.0.0-20231106220600-c112aac8c552/go.mod h1:ETkJYhFYs98XHSmjuw9sAhaMn+deIVDk7rTTptrBiG0=
 github.com/khulnasoft-lab/go-deb-version v0.0.0-20231008112102-b9979c743dca h1:cF7M8Yqa4yv1U8JUd9x2cldqIjCv/mUZpU5dScxGRXg=
 github.com/khulnasoft-lab/go-deb-version v0.0.0-20231008112102-b9979c743dca/go.mod h1:sDkRhBe1yHkeYgvRW44tL7Q1HcScL0wxPq7dXtTmJik=
+github.com/khulnasoft-lab/go-deb-version v0.0.0-20240520170140-87ae06920b2f h1:V3KrSLocpUcrhcURcxAkM5urXAxso6SwLnNn5FuiEgE=
+github.com/khulnasoft-lab/go-deb-version v0.0.0-20240520170140-87ae06920b2f/go.mod h1:sDkRhBe1yHkeYgvRW44tL7Q1HcScL0wxPq7dXtTmJik=
 github.com/khulnasoft-lab/go-gem-version v1.0.0 h1:MjAto7IKHU1t0A5sE7w/ZGmdCMlTGOa/xfE81/kK3Og=
 github.com/khulnasoft-lab/go-gem-version v1.0.0/go.mod h1:QerlGxSXMXlQy+2QMy+gxw199FzcJ+gRwVcsyzx2a8s=
 github.com/khulnasoft-lab/go-npm-version v1.0.0 h1:RahlsN0QlIqBv5E5+Ch5Q6LT5JA3xu2HXTv1AdloA3k=
