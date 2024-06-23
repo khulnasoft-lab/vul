@@ -34,7 +34,7 @@ require (
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/open-policy-agent/opa v0.43.1
 	github.com/spf13/afero v1.9.2
-	github.com/stretchr/testify v1.8.4
+	github.com/stretchr/testify v1.9.0
 	github.com/testcontainers/testcontainers-go v0.13.0
 	github.com/twitchtv/twirp v5.10.1+incompatible
 	github.com/urfave/cli/v2 v2.25.7
