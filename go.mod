@@ -18,7 +18,7 @@ require (
 	github.com/google/go-github/v33 v33.0.0
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/wire v0.4.0
-	github.com/hashicorp/go-getter v1.7.0
+	github.com/hashicorp/go-getter v1.7.5
 	github.com/huandu/xstrings v1.3.2 // indirect
 	github.com/khulnasoft-lab/boltdb-fixtures v1.0.0
 	github.com/khulnasoft-lab/go-apk-version v0.0.0-20231106220600-c112aac8c552
